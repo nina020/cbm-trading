@@ -1,0 +1,25 @@
+{
+  "name": "cbm",
+  "version": "1.0.0",
+  "description": "Panel modular de trading y simulación para Deriv",
+  "main": "index.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --env-file=.env server.js",
+    "check": "node --check server.js && node --check index.js && node --check auth.js && node --input-type=module --check < app.js",
+    "test": "node --experimental-vm-modules --test test/*.test.cjs"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "engines": {
+    "node": ">=20"
+  },
+  "type": "commonjs",
+  "dependencies": {
+    "@deriv/deriv-api": "^1.0.15",
+    "dotenv": "^17.4.2",
+    "lightweight-charts": "^3.8.0",
+    "ws": "^8.21.0"
+  }
+}

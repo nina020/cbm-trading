@@ -1,0 +1,152 @@
+import { obtenerWsUrl } from '../services/derivApi.js';
+import { crearWebSocket, enviarProposal, comprarProposal } from '../services/websocketService.js';
+import { MULTIPLICADOR_DEFAULT } from '../config.js';
+import { calcularObjetivosMonetarios } from './riskManager.js';
+
+function multiplicadoresPermitidos(error) {
+  const raw = error?.code_args?.[0];
+  if (typeof raw !== 'string') return [];
+  return raw.split(',').map(Number).filter(Number.isFinite);
+}
+
+function numeroFinito(value) {
+  const numero = Number(value);
+  return Number.isFinite(numero) ? numero : null;
+}
+
+export function extraerCostosReportados(data = {}) {
+  const campos = ['commission', 'fee', 'contract_fee', 'transaction_fee'];
+  const valores = campos
+    .map(campo => numeroFinito(data[campo]))
+    .filter(valor => valor !== null);
+
+  if (Array.isArray(data.charges)) {
+    data.charges.forEach(cargo => {
+      const valor = numeroFinito(cargo?.amount ?? cargo?.value);
+      if (valor !== null) valores.push(valor);
+    });
+  }
+
+  return valores.length
+    ? valores.reduce((total, valor) => total + Math.abs(valor), 0)
+    : null;
+}
+
+export function normalizarCotizacion(propuesta, multiplicador) {
+  return {
+    proposalId: propuesta.id,
+    precioCotizado: numeroFinito(propuesta.ask_price),
+    payout: numeroFinito(propuesta.payout),
+    spot: numeroFinito(propuesta.spot),
+    multiplicador: numeroFinito(propuesta.multiplier) ?? numeroFinito(multiplicador),
+    costosReportados: extraerCostosReportados(propuesta),
+  };
+}
+
+export function crearPayload({
+  mercadoId, contractType, stake, entrada, sl, tp, multiplicador, limitesMinimos = {},
+}) {
+  const { riesgo: riesgoMonetario, objetivo: objetivoMonetario } = calcularObjetivosMonetarios(stake);
+  return {
+    amount: stake,
+    basis: 'stake',
+    contract_type: contractType,
+    currency: 'USD',
+    multiplier: multiplicador,
+    underlying_symbol: mercadoId,
+    limit_order: {
+      stop_loss: Math.max(limitesMinimos.stop_loss || 0.1, Number(riesgoMonetario.toFixed(2))),
+      take_profit: Math.max(limitesMinimos.take_profit || 0.1, Number(objetivoMonetario.toFixed(2))),
+    },
+  };
+}
+
+async function procesarOrden({
+  mercadoId,
+  tipo,
+  stake,
+  entrada,
+  sl,
+  tp,
+}, comprar, { confirmarCotizacion } = {}) {
+  const wsUrl = await obtenerWsUrl();
+  const contractType = tipo === 'BUY' ? 'MULTUP' : 'MULTDOWN';
+
+  return new Promise((resolve, reject) => {
+    let multiplicador = MULTIPLICADOR_DEFAULT;
+    let reintentoMultiplicador = false;
+    let cotizacion = null;
+    const limitesMinimos = {};
+    const limitesReintentados = new Set();
+
+    function solicitarProposal(socket) {
+      enviarProposal(socket, crearPayload({
+        mercadoId, contractType, stake, entrada, sl, tp, multiplicador, limitesMinimos,
+      }));
+    }
+
+    const ws = crearWebSocket(wsUrl, {
+      onOpen: solicitarProposal,
+      onMessage: msg => {
+        if (msg.error) {
+          const permitidos = multiplicadoresPermitidos(msg.error);
+          if (msg.error.subcode === 'MultiplierOutOfRange' && permitidos.length && !reintentoMultiplicador) {
+            reintentoMultiplicador = true;
+            multiplicador = permitidos[0];
+            solicitarProposal(ws);
+            return;
+          }
+
+          const field = msg.error.details?.field;
+          const minimo = Number(msg.error.code_args?.[0]);
+          if (
+            msg.error.subcode === 'LimitOrderAmountTooLow'
+            && ['stop_loss', 'take_profit'].includes(field)
+            && Number.isFinite(minimo)
+            && !limitesReintentados.has(field)
+          ) {
+            limitesReintentados.add(field);
+            limitesMinimos[field] = minimo;
+            solicitarProposal(ws);
+            return;
+          }
+          ws.close();
+          reject(new Error(msg.error.message));
+          return;
+        }
+
+        if (msg.msg_type === 'proposal' && msg.proposal) {
+          cotizacion = normalizarCotizacion(msg.proposal, multiplicador);
+          if (comprar) {
+            if (confirmarCotizacion && !confirmarCotizacion(cotizacion)) {
+              ws.close();
+              resolve({ cancelada: true, cotizacion, multiplicador });
+              return;
+            }
+            comprarProposal(ws, msg.proposal.id, Number(msg.proposal.ask_price));
+            return;
+          }
+          ws.close();
+          resolve({ propuesta: msg.proposal, cotizacion, multiplicador });
+        }
+
+        if (msg.msg_type === 'buy') {
+          ws.close();
+          resolve({ compra: msg.buy, cotizacion, multiplicador });
+        }
+      },
+      onError: () => {
+        ws.close();
+        reject(new Error('Error de conexión con Deriv'));
+      },
+    });
+  });
+}
+
+export function cotizarOrdenDemo(parametros) {
+  return procesarOrden(parametros, false);
+}
+
+export async function ejecutarOrdenDemo(parametros, opciones) {
+  return procesarOrden(parametros, true, opciones);
+}

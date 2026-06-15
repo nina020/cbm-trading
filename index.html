@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CBM Trading</title>
+<script src="/vendor/lightweight-charts.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
+
+:root {
+  --bg-page: #131722;
+  --bg-panel: #1e222d;
+  --bg-stat: #131722;
+  --border: #2a2e39;
+  --text-primary: #d1d4dc;
+  --text-secondary: #9598a1;
+  --text-faint: #5d606b;
+  --chart-bg: #1e222d;
+  --chart-text: #9598a1;
+}
+
+[data-theme="light"] {
+  --bg-page: #f0f3fa;
+  --bg-panel: #ffffff;
+  --bg-stat: #f0f3fa;
+  --border: #e0e3eb;
+  --text-primary: #131722;
+  --text-secondary: #6b7280;
+  --text-faint: #9ca3af;
+  --chart-bg: #ffffff;
+  --chart-text: #6b7280;
+}
+
+body { background: var(--bg-page); color: var(--text-primary); transition: background .2s, color .2s; }
+.header { background: var(--bg-panel); border-bottom: 1px solid var(--border); padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+.header h1 { font-size: 16px; font-weight: 600; color: var(--text-primary); }
+.status { font-size: 13px; display: flex; align-items: center; gap: 6px; color: var(--text-secondary); }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: #26a69a; }
+.header-right { display: flex; align-items: center; gap: 20px; }
+.balance-info { font-size: 13px; display: flex; align-items: center; gap: 8px; color: var(--text-secondary); }
+.balance-value { font-weight: 600; color: #26a69a; font-size: 14px; }
+.theme-toggle { background: var(--bg-stat); border: 1px solid var(--border); border-radius: 6px; padding: 6px 12px; font-size: 13px; cursor: pointer; color: var(--text-primary); display: flex; align-items: center; gap: 6px; }
+.theme-toggle:hover { border-color: #26a69a; }
+.app-menu { position: relative; }
+.menu-dropdown { position: absolute; right: 0; top: 40px; min-width: 180px; background: var(--bg-panel); border: 1px solid var(--border); border-radius: 8px; padding: 6px; display: none; z-index: 1100; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
+.menu-dropdown.open { display: block; }
+.menu-item { width: 100%; background: transparent; border: 0; color: var(--text-primary); padding: 9px 10px; border-radius: 6px; text-align: left; cursor: pointer; font-size: 13px; }
+.menu-item:hover { background: var(--bg-stat); color: #26a69a; }
+
+.summary-bar { background: var(--bg-panel); border-bottom: 1px solid var(--border); padding: 14px 20px; display: flex; flex-direction: column; gap: 12px; }
+.summary-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 10px; }
+.summary-stat { background: var(--bg-stat); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; text-align: center; }
+.summary-stat-label { font-size: 10px; color: var(--text-faint); }
+.summary-stat-value { font-size: 17px; font-weight: 600; margin-top: 2px; }
+
+.config-row { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
+.config-group { display: flex; flex-direction: column; gap: 4px; }
+.config-group label { font-size: 11px; color: var(--text-secondary); white-space: nowrap; }
+.config-group select, .config-group input[type="number"] { padding: 7px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; background: var(--bg-stat); color: var(--text-primary); }
+.config-group.market select { width: 200px; }
+.config-group.period select { width: 150px; }
+.config-group.num input { width: 80px; }
+
+.invest-mode { display: flex; align-items: center; gap: 8px; }
+.invest-mode label.radio-label { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--text-secondary); white-space: nowrap; cursor: pointer; }
+.invest-mode input[type="number"] { width: 75px; padding: 7px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; background: var(--bg-stat); color: var(--text-primary); }
+.invest-mode input[type="number"]:disabled { opacity: 0.35; cursor: not-allowed; }
+
+.btn-add { background: #26a69a; color: #fff; border: none; border-radius: 6px; padding: 0 18px; height: 34px; font-size: 13px; font-weight: 500; cursor: pointer; white-space: nowrap; }
+.btn-add:hover { background: #1f8a80; }
+.btn-history { background: var(--bg-stat); border: 1px solid var(--border); border-radius: 6px; padding: 0 14px; height: 34px; font-size: 13px; cursor: pointer; color: var(--text-primary); white-space: nowrap; }
+.btn-history:hover { border-color: #26a69a; }
+.btn-clear { background: var(--bg-stat); border: 1px solid var(--border); border-radius: 6px; padding: 0 14px; height: 34px; font-size: 13px; cursor: pointer; color: #ef5350; white-space: nowrap; }
+.btn-clear:hover { border-color: #ef5350; background: rgba(239,83,80,0.1); }
+
+.divider { width: 1px; height: 34px; background: var(--border); }
+
+.risk-note { font-size: 11px; color: var(--text-faint); }
+.storage-note { font-size: 11px; color: var(--text-faint); display: flex; align-items: center; gap: 6px; }
+.backtest-panel { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+.backtest-controls { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
+.backtest-results { margin-top: 12px; }
+.backtest-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; }
+.backtest-note { margin-top: 10px; font-size: 11px; color: var(--text-secondary); text-align: center; }
+.backtest-section-title { margin: 16px 0 8px; font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.backtest-table { min-width: 520px; }
+.calibration-recommendation { margin-top: 14px; padding: 12px; border: 1px solid rgba(41,98,255,.45); border-radius: 8px; background: rgba(41,98,255,.08); display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 12px; color: var(--text-primary); }
+.calibration-recommendation div div { margin-top: 3px; color: var(--text-secondary); }
+.calibration-recommendation small { display: block; margin-top: 4px; color: #d68000; }
+.calibration-list { display: flex; flex-direction: column; gap: 8px; }
+.calibration-item { padding: 9px 10px; border: 1px solid var(--border); border-radius: 6px; display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 12px; color: var(--text-primary); }
+
+.execution-section { padding: 16px 20px 0; }
+.section-title-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; flex-wrap: wrap; gap: 10px; }
+.section-title { font-size: 15px; font-weight: 600; color: var(--text-primary); }
+.cooldown-input { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-secondary); }
+.cooldown-input input { width: 70px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; background: var(--bg-stat); color: var(--text-primary); }
+.execution-notice { font-size: 11px; color: var(--text-secondary); margin-bottom: 10px; min-height: 16px; }
+.execution-details { display: none; }
+.execution-details.open { display: block; }
+.market-ranking-section { padding: 16px 20px 0; }
+.market-ranking-note { margin-top: -6px; margin-bottom: 10px; font-size: 10px; color: var(--text-faint); }
+.market-ranking-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.market-rank-card { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-panel); }
+.market-rank-position { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--bg-stat); font-weight: 600; font-size: 12px; }
+.market-rank-main { display: flex; flex-direction: column; gap: 2px; }
+.market-rank-main strong { font-size: 12px; }
+.market-rank-main span, .market-rank-metric small { font-size: 9px; color: var(--text-faint); }
+.market-rank-metric { min-width: 0; }
+.market-rank-metric b { display: block; margin-top: 2px; font-size: 11px; white-space: nowrap; }
+.market-rank-score { text-align: right; font-size: 14px; font-weight: 600; }
+.market-rank-recomendable { border-color: rgba(38,166,154,.5); }
+.market-rank-recomendable .market-rank-score, .market-rank-recomendable .market-rank-main span { color: #26a69a; }
+.market-rank-considerar .market-rank-score, .market-rank-considerar .market-rank-main span { color: #d68000; }
+.market-rank-observar .market-rank-score { color: #ef5350; }
+.market-rank-open { height: 28px; padding: 0 10px; }
+.market-rank-details { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding-top: 7px; border-top: 1px solid var(--border); }
+.market-rank-actions { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.market-rank-actions small { font-size: 9px; color: var(--text-faint); }
+@media (max-width: 1050px) {
+  .market-ranking-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 760px) {
+  .market-ranking-list { grid-template-columns: 1fr; }
+}
+
+.positions-section { padding: 16px 20px 0; }
+.positions-grid { display: flex; flex-direction: column; gap: 8px; }
+.positions-group { display: flex; flex-direction: column; gap: 8px; }
+.positions-group-title { font-size: 11px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .04em; }
+.position-card { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.pos-title { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.pos-sub { font-size: 11px; color: var(--text-faint); margin-top: 2px; }
+.pos-limits { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 6px; font-size: 11px; color: var(--text-secondary); }
+.pos-limits b { margin-left: 3px; }
+.pos-sl-amount { color: #ef5350; }
+.pos-tp-amount { color: #26a69a; }
+.pos-pnl-box { text-align: right; }
+.pos-pnl { font-size: 16px; font-weight: 600; }
+.pos-status { font-size: 10px; color: var(--text-faint); margin-top: 2px; }
+.position-actions { display: flex; align-items: center; gap: 8px; }
+.btn-close { background: rgba(239,83,80,0.1); border: 1px solid #ef5350; border-radius: 6px; padding: 6px 14px; cursor: pointer; color: #ef5350; font-size: 12px; font-weight: 500; }
+.btn-close:hover { background: rgba(239,83,80,0.2); }
+.positions-empty { padding: 16px; text-align: center; color: var(--text-faint); font-size: 13px; background: var(--bg-panel); border: 1px solid var(--border); border-radius: 8px; }
+
+.markets { padding: 16px 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px; align-items: start; }
+.empty { grid-column: 1 / -1; text-align: center; padding: 40px; color: var(--text-faint); font-size: 14px; }
+.card { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
+.card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.card-title { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.card-meta { display: flex; align-items: center; gap: 6px; }
+.badge { font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 500; }
+.badge-alta { background: rgba(239,83,80,0.15); color: #ef5350; }
+.badge-media { background: rgba(255,176,32,0.15); color: #d68000; }
+.badge-estable { background: rgba(38,166,154,0.15); color: #1f8a80; }
+.card-time { font-size: 10px; color: var(--text-faint); }
+.btn-remove { background: none; border: 1px solid var(--border); border-radius: 4px; padding: 3px 7px; cursor: pointer; color: var(--text-faint); font-size: 11px; }
+.btn-remove:hover { background: rgba(239,83,80,0.1); color: #ef5350; border-color: #ef5350; }
+.chart-container { height: 200px; margin-bottom: 10px; border-radius: 4px; overflow: hidden; }
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 10px; }
+.stat { background: var(--bg-stat); border-radius: 6px; padding: 6px 8px; }
+.stat-label { font-size: 10px; color: var(--text-faint); }
+.stat-value { font-size: 13px; font-weight: 600; margin-top: 2px; color: var(--text-primary); }
+.auto-toggle-row { margin-bottom: 8px; }
+.auto-toggle-label { display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer; color: var(--text-secondary); }
+.auto-toggle-label input { width: 16px; height: 16px; cursor: pointer; }
+.auto-status { margin-bottom: 8px; padding: 9px 10px; border: 1px solid var(--border); border-radius: 7px; background: var(--bg-stat); }
+.auto-status-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 11px; }
+.auto-status-head span { padding: 2px 6px; border-radius: 4px; background: var(--bg-panel); color: var(--text-secondary); }
+.auto-status-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; margin-top: 7px; }
+.auto-status-grid div { padding: 5px; border-radius: 5px; background: var(--bg-panel); text-align: center; }
+.auto-status-grid small { display: block; color: var(--text-faint); font-size: 9px; }
+.auto-status-grid b { display: block; margin-top: 2px; color: var(--text-primary); font-size: 11px; }
+.auto-status-reason { margin-top: 7px; font-size: 10px; color: var(--text-secondary); }
+.auto-status-source { margin-top: 3px; font-size: 9px; color: var(--text-faint); text-align: right; }
+.auto-status-off strong, .auto-status-waiting strong { color: var(--text-secondary); }
+.auto-status-quality strong, .auto-status-confirming strong, .auto-status-cooldown strong { color: #d68000; }
+.auto-status-ready strong, .auto-status-opening strong, .auto-status-executed strong { color: #26a69a; }
+.auto-status-error strong { color: #ef5350; }
+.signal { display: flex; align-items: center; gap: 6px; padding: 7px 10px; border-radius: 6px; font-size: 13px; font-weight: 500; margin-bottom: 6px; }
+.signal-buy { background: rgba(38,166,154,0.15); color: #1f8a80; }
+.signal-sell { background: rgba(239,83,80,0.15); color: #ef5350; }
+.signal-wait { background: rgba(255,176,32,0.15); color: #d68000; }
+.signal-loading { background: var(--bg-stat); color: var(--text-faint); }
+.signal-quality { margin-top: 6px; padding: 6px 8px; border-radius: 6px; font-size: 11px; text-align: center; }
+.signal-quality-fuerte { background: rgba(38,166,154,.14); color: #26a69a; }
+.signal-quality-moderada { background: rgba(255,176,32,.14); color: #d68000; }
+.signal-quality-débil { background: rgba(239,83,80,.12); color: #ef5350; }
+.trade-plan { background: var(--bg-stat); border-radius: 6px; padding: 8px 10px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.trade-plan-label { font-size: 10px; color: var(--text-faint); }
+.trade-plan-value { font-size: 13px; font-weight: 600; margin-top: 2px; color: var(--text-primary); }
+.trade-plan-value.sl { color: #ef5350; }
+.trade-plan-value.tp { color: #26a69a; }
+.trade-plan-ratio { font-size: 10px; color: var(--text-faint); text-align: center; margin-top: 6px; }
+.trade-plan-extra { background: var(--bg-stat); border-radius: 6px; padding: 8px 10px; margin-top: 6px; display: flex; align-items: center; justify-content: space-between; }
+.trade-plan-extra-label { font-size: 11px; color: var(--text-secondary); }
+.trade-plan-extra-value { font-size: 14px; font-weight: 600; color: #26a69a; }
+.btn-execute { width: 100%; margin-top: 8px; background: #2962ff; color: #fff; border: none; border-radius: 6px; padding: 9px; font-size: 12px; font-weight: 600; cursor: pointer; }
+.btn-execute:hover { background: #1e4fd6; }
+.btn-execute:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-execute.sell { background: #ef5350; }
+.btn-execute.sell:hover { background: #d63a35; }
+
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: none; align-items: center; justify-content: center; z-index: 1000; padding: 20px; }
+.modal-content { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 8px; padding: 20px; max-width: 950px; width: 100%; max-height: 85vh; overflow-y: auto; }
+.modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.modal-header h2 { font-size: 16px; font-weight: 600; color: var(--text-primary); }
+.modal-close { background: var(--bg-stat); border: 1px solid var(--border); border-radius: 6px; padding: 6px 12px; cursor: pointer; color: var(--text-primary); font-size: 13px; }
+.modal-close:hover { border-color: #ef5350; color: #ef5350; }
+.history-table-wrap { background: var(--bg-stat); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; overflow-x: auto; }
+table.history-table { width: 100%; border-collapse: collapse; font-size: 12px; min-width: 650px; }
+table.history-table th { text-align: left; padding: 10px 12px; color: var(--text-faint); font-weight: 500; border-bottom: 1px solid var(--border); white-space: nowrap; }
+table.history-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); color: var(--text-primary); white-space: nowrap; }
+table.history-table tr:last-child td { border-bottom: none; }
+.tag { font-size: 11px; padding: 2px 8px; border-radius: 4px; font-weight: 500; }
+.tag-buy { background: rgba(38,166,154,0.15); color: #1f8a80; }
+.tag-sell { background: rgba(239,83,80,0.15); color: #ef5350; }
+.tag-pendiente { background: rgba(255,176,32,0.15); color: #d68000; }
+.tag-ganada { background: rgba(38,166,154,0.15); color: #1f8a80; }
+.tag-perdida { background: rgba(239,83,80,0.15); color: #ef5350; }
+.history-empty { padding: 24px; text-align: center; color: var(--text-faint); font-size: 13px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>📊 CBM Trading</h1>
+  <div class="header-right">
+    <div class="balance-info">
+      <span>Saldo demo (Deriv):</span>
+      <span class="balance-value" id="balance-value">Cargando...</span>
+    </div>
+    <div class="status">
+      <div class="dot"></div>
+      <span>Conectado</span>
+    </div>
+    <div class="app-menu">
+      <button class="theme-toggle" id="menu-toggle" onclick="toggleMenu()">Menú ▾</button>
+      <div class="menu-dropdown" id="menu-dropdown">
+        <button class="menu-item" onclick="abrirBacktesting()">Backtesting histórico</button>
+        <button class="menu-item" onclick="abrirConfiguracionSenales()">Calidad de señales</button>
+        <button class="menu-item" onclick="abrirConfiguracionRiesgo()">Límites globales de riesgo</button>
+      </div>
+    </div>
+    <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()">🌙 Oscuro</button>
+  </div>
+</div>
+
+<div class="summary-bar">
+  <div class="summary-stats">
+    <div class="summary-stat">
+      <div class="summary-stat-label">Total señales</div>
+      <div class="summary-stat-value" id="hist-total">0</div>
+    </div>
+    <div class="summary-stat">
+      <div class="summary-stat-label">Ganadas</div>
+      <div class="summary-stat-value" id="hist-ganadas" style="color:#26a69a">0</div>
+    </div>
+    <div class="summary-stat">
+      <div class="summary-stat-label">Perdidas</div>
+      <div class="summary-stat-value" id="hist-perdidas" style="color:#ef5350">0</div>
+    </div>
+    <div class="summary-stat">
+      <div class="summary-stat-label">Win rate</div>
+      <div class="summary-stat-value" id="hist-winrate">—</div>
+    </div>
+    <div class="summary-stat">
+      <div class="summary-stat-label">Saldo demo</div>
+      <div class="summary-stat-value" id="hist-saldo-sim">$10,000.00</div>
+    </div>
+    <div class="summary-stat">
+      <div class="summary-stat-label">P&L de la sesión</div>
+      <div class="summary-stat-value" id="hist-pnl">$0.00</div>
+    </div>
+  </div>
+
+  <div class="config-row">
+    <div class="config-group market">
+      <label>Mercado</label>
+      <select id="select-mercado">
+        <optgroup label="— Boom —">
+          <option value="BOOM500|Boom 500|alta">Boom 500 Index</option>
+          <option value="BOOM600|Boom 600|media">Boom 600 Index</option>
+          <option value="BOOM900|Boom 900|media">Boom 900 Index</option>
+          <option value="BOOM1000|Boom 1000|estable">Boom 1000 Index</option>
+        </optgroup>
+        <optgroup label="— Crash —">
+          <option value="CRASH500|Crash 500|alta">Crash 500 Index</option>
+          <option value="CRASH600|Crash 600|media">Crash 600 Index</option>
+          <option value="CRASH900|Crash 900|media">Crash 900 Index</option>
+          <option value="CRASH1000|Crash 1000|estable">Crash 1000 Index</option>
+        </optgroup>
+        <optgroup label="— Step Index —">
+          <option value="stpRNG|Step 100|estable">Step Index 100</option>
+          <option value="stpRNG2|Step 200|estable">Step Index 200</option>
+          <option value="stpRNG3|Step 300|estable">Step Index 300</option>
+          <option value="stpRNG4|Step 400|estable">Step Index 400</option>
+          <option value="stpRNG5|Step 500|estable">Step Index 500</option>
+        </optgroup>
+        <optgroup label="— Volatility —">
+          <option value="1HZ10V|Vol 10 (1s)|estable">Volatility 10 (1s)</option>
+          <option value="R_10|Vol 10|estable">Volatility 10 Index</option>
+          <option value="1HZ25V|Vol 25 (1s)|estable">Volatility 25 (1s)</option>
+          <option value="R_25|Vol 25|estable">Volatility 25 Index</option>
+          <option value="1HZ50V|Vol 50 (1s)|media">Volatility 50 (1s)</option>
+          <option value="R_50|Vol 50|media">Volatility 50 Index</option>
+          <option value="1HZ75V|Vol 75 (1s)|media">Volatility 75 (1s)</option>
+          <option value="R_75|Vol 75|media">Volatility 75 Index</option>
+          <option value="1HZ100V|Vol 100 (1s)|alta">Volatility 100 (1s)</option>
+          <option value="R_100|Vol 100|alta">Volatility 100 Index</option>
+        </optgroup>
+      </select>
+    </div>
+    <div class="config-group period">
+      <label>Periodo</label>
+      <select id="select-periodo">
+        <option value="7">7 (rápido)</option>
+        <option value="14" selected>14 (recomendado)</option>
+        <option value="21">21 (lento)</option>
+      </select>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="invest-mode">
+      <label class="radio-label">
+        <input type="radio" name="modo-inversion" value="porcentaje" checked onchange="cambiarModoInversion('porcentaje')">
+        % del saldo
+      </label>
+      <input type="number" id="risk-input" value="1" min="0.1" max="10" step="0.1" onchange="actualizarRiesgoPorcentaje(this.value)">
+    </div>
+    <div class="invest-mode">
+      <label class="radio-label">
+        <input type="radio" name="modo-inversion" value="fijo" onchange="cambiarModoInversion('fijo')">
+        Monto fijo ($)
+      </label>
+      <input type="number" id="fixed-input" value="10" min="1" step="1" disabled oninput="actualizarMontoFijo(this.value)">
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="config-group period">
+      <label>Modo de ejecución</label>
+      <select id="execution-mode" onchange="cambiarModoEjecucion(this.value)">
+        <option value="simulacion" selected>Simulación segura</option>
+        <option value="demo">Cuenta demo real</option>
+      </select>
+    </div>
+
+    <div class="divider"></div>
+
+    <button class="btn-add" id="btn-add-market" onclick="agregarMercado()">+ Agregar</button>
+    <button class="btn-history" id="execution-toggle" aria-expanded="false" onclick="alternarRegistroEjecuciones()">Detalles de ejecuciones</button>
+    <button class="btn-history" onclick="abrirPosiciones()">Posiciones abiertas</button>
+    <button class="btn-history" onclick="abrirHistorial()">📋 Historial</button>
+    <button class="btn-clear" onclick="limpiarHistorial()">🗑️ Limpiar</button>
+  </div>
+
+  <div class="risk-note">El modo <b>Simulación segura</b> no envía compras a Deriv. Para operar el saldo demo real debes seleccionarlo explícitamente.</div>
+  <div class="storage-note">💾 El historial de señales se guarda automáticamente en este navegador y persiste al recargar la página.</div>
+</div>
+
+<div class="market-ranking-section">
+  <div class="section-title-row">
+    <div class="section-title">Mercados recomendados para comenzar</div>
+  </div>
+  <div class="market-ranking-note">Top 3 automático basado en datos históricos recientes, estabilidad, calibración y resultados registrados. No garantiza ganancias.</div>
+  <div class="market-ranking-list" id="market-ranking">
+    <div class="positions-empty">Analizando mercados estables...</div>
+  </div>
+</div>
+
+<div class="markets" id="markets">
+  <div class="empty" id="empty">
+    Selecciona un mercado arriba y haz click en Agregar para comenzar.
+  </div>
+</div>
+
+<div class="modal-overlay" id="execution-modal" onclick="cerrarEjecucionesClick(event)">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h2>Registro de ejecuciones</h2>
+      <button class="modal-close" onclick="cerrarEjecuciones()">✕ Cerrar</button>
+    </div>
+    <div class="cooldown-input" style="margin-bottom:14px;justify-content:flex-end;flex-wrap:wrap">
+      <label>Cooldown entre operaciones (por mercado):</label>
+      <input type="number" id="cooldown-input" value="60" min="5" step="5" onchange="actualizarCooldown(this.value)">
+      <span>seg</span>
+      <button class="btn-clear" onclick="limpiarRegistroEjecuciones()">Limpiar registro</button>
+    </div>
+    <div id="execution-details">
+      <div class="execution-notice" id="execution-notice">Las operaciones manuales y automáticas aparecerán aquí.</div>
+      <div class="history-table-wrap">
+        <table class="history-table">
+          <thead>
+            <tr><th>Fecha</th><th>Mercado</th><th>Tipo</th><th>Modo</th><th>Origen</th><th>Inversión</th><th>Multiplicador</th><th>Resultado</th><th>P&L bruto</th><th>Costos</th><th>P&L neto</th></tr>
+          </thead>
+          <tbody id="execution-body"></tbody>
+        </table>
+        <div class="history-empty" id="execution-empty">Todavía no hay ejecuciones registradas.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="positions-modal" onclick="cerrarPosicionesClick(event)">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h2>Posiciones abiertas</h2>
+      <div style="display:flex;gap:8px">
+        <button class="btn-history" onclick="cargarPortfolio()">🔄 Actualizar posiciones</button>
+        <button class="modal-close" onclick="cerrarPosiciones()">✕ Cerrar</button>
+      </div>
+    </div>
+    <div id="position-chart-panel" class="backtest-panel" style="display:none;margin-bottom:14px">
+      <div class="section-title-row">
+        <div>
+          <div class="section-title" id="position-chart-title">Comportamiento del mercado</div>
+          <div class="market-ranking-note" style="margin:3px 0 0">Precio reciente en azul y media móvil de 14 períodos en amarillo.</div>
+        </div>
+        <button class="modal-close" onclick="cerrarGraficoPosicion()">Ocultar gráfico</button>
+      </div>
+      <div id="position-chart-loading" class="positions-empty">Selecciona una posición para visualizar su mercado.</div>
+      <div id="position-chart" style="height:260px;display:none"></div>
+    </div>
+    <div class="positions-grid" id="positions-grid">
+      <div class="positions-group">
+        <div class="positions-group-title">Cuenta demo real</div>
+        <div id="real-positions"><div class="positions-empty">Abre esta ventana para consultar las posiciones.</div></div>
+      </div>
+      <div class="positions-group" id="simulated-positions-group" style="display:none">
+        <div class="positions-group-title">Simulación segura</div>
+        <div id="simulated-positions"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-overlay" onclick="cerrarHistorialClick(event)">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h2>Historial detallado de señales</h2>
+      <button class="modal-close" onclick="cerrarHistorial()">✕ Cerrar</button>
+    </div>
+    <div class="history-table-wrap">
+      <table class="history-table" id="history-table" style="display:none">
+        <thead>
+          <tr>
+            <th>Hora</th>
+            <th>Mercado</th>
+            <th>Tipo</th>
+            <th>Entrada</th>
+            <th>SL</th>
+            <th>TP</th>
+            <th>Inversión</th>
+            <th>Resultado</th>
+            <th>P&L</th>
+          </tr>
+        </thead>
+        <tbody id="history-body"></tbody>
+      </table>
+      <div class="history-empty" id="history-empty">Aún no se han generado señales BUY/SELL.</div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="backtest-modal" onclick="cerrarBacktestingClick(event)">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h2>Backtesting histórico</h2>
+      <button class="modal-close" onclick="cerrarBacktesting()">✕ Cerrar</button>
+    </div>
+    <div class="backtest-panel">
+      <div class="backtest-controls">
+        <div class="config-group">
+          <label>Muestra histórica</label>
+          <select id="backtest-count">
+            <option value="500">500 ticks</option>
+            <option value="1000" selected>1,000 ticks</option>
+            <option value="5000">5,000 ticks</option>
+          </select>
+        </div>
+        <button class="btn-add" id="btn-backtest" onclick="ejecutarBacktestActual()">Ejecutar backtest</button>
+        <div class="risk-note">Compara sin filtro y umbrales 70, 80 y 90 usando las confirmaciones configuradas. No ejecuta operaciones.</div>
+      </div>
+      <div class="backtest-results" id="backtest-results">
+        <div class="positions-empty">Selecciona la configuración y ejecuta el backtest.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="signal-config-modal" onclick="cerrarConfiguracionSenalesClick(event)">
+  <div class="modal-content" style="max-width:620px">
+    <div class="modal-header">
+      <h2>Configuración de calidad de señales</h2>
+      <button class="modal-close" onclick="cerrarConfiguracionSenales()">✕ Cerrar</button>
+    </div>
+    <div class="risk-limits-grid" style="display:grid;grid-template-columns:repeat(2,minmax(180px,1fr));gap:14px">
+      <div class="config-group">
+        <label>Puntuación mínima para auto trading</label>
+        <input type="number" id="signal-threshold" min="50" max="95" step="1">
+      </div>
+      <div class="config-group">
+        <label>Confirmaciones consecutivas</label>
+        <input type="number" id="signal-confirmations" min="1" max="10" step="1">
+      </div>
+    </div>
+    <label class="auto-toggle-label" style="margin-top:16px">
+      <input type="checkbox" id="signal-filter-auto">
+      Aplicar este filtro a las ejecuciones automáticas
+    </label>
+    <div class="risk-note" style="margin-top:12px">
+      La puntuación combina tendencia, RSI, momentum y consistencia. Es una medida de calidad, no una garantía de ganancia.
+    </div>
+    <div class="backtest-section-title">Calibraciones guardadas por mercado</div>
+    <div id="market-calibration-list" class="positions-empty">No hay calibraciones guardadas.</div>
+    <div style="margin-top:16px;text-align:right">
+      <button class="btn-add" onclick="guardarConfiguracionSenales()">Guardar configuración</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="risk-config-modal" onclick="cerrarConfiguracionRiesgoClick(event)">
+  <div class="modal-content" style="max-width:700px">
+    <div class="modal-header">
+      <h2>Límites globales de riesgo</h2>
+      <button class="modal-close" onclick="cerrarConfiguracionRiesgo()">✕ Cerrar</button>
+    </div>
+    <div class="backtest-metrics" id="global-risk-status" style="margin-bottom:16px"></div>
+    <div class="risk-limits-grid" style="display:grid;grid-template-columns:repeat(2,minmax(180px,1fr));gap:14px">
+      <div class="config-group">
+        <label>Pérdida máxima diaria ($)</label>
+        <input type="number" id="global-max-daily-loss" min="1" step="1">
+      </div>
+      <div class="config-group">
+        <label>Máximo de posiciones abiertas</label>
+        <input type="number" id="global-max-open" min="1" max="50" step="1">
+      </div>
+      <div class="config-group">
+        <label>Pérdidas consecutivas antes de pausar</label>
+        <input type="number" id="global-max-losses" min="1" max="20" step="1">
+      </div>
+      <div class="config-group">
+        <label>Duración de la pausa (minutos)</label>
+        <input type="number" id="global-pause-minutes" min="1" max="1440" step="1">
+      </div>
+    </div>
+    <div class="risk-note" style="margin-top:12px">
+      Estos límites bloquean operaciones manuales y automáticas antes de enviar una orden o abrir una simulación.
+    </div>
+    <div style="margin-top:16px;display:flex;justify-content:flex-end;gap:8px">
+      <button class="btn-history" onclick="reanudarOperativa()">Reanudar operativa</button>
+      <button class="btn-add" onclick="guardarConfiguracionRiesgo()">Guardar límites</button>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="/app.js"></script>
+</body>
+</html>

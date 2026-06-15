@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: cbm-trading
+    runtime: node
+    plan: free
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: DERIV_TOKEN
+        sync: false
+      - key: DERIV_APP_ID
+        sync: false
+      - key: DERIV_ACCOUNT_ID
+        sync: false
+      - key: APP_USERNAME
+        sync: false
+      - key: APP_PASSWORD
+        sync: false
+      - key: NODE_ENV
+        value: production
