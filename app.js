@@ -6,6 +6,7 @@ import {
 } from './config.js';
 import { obtenerCuenta, obtenerWsUrl } from './services/derivApi.js';
 import { obtenerTicksHistoricos } from './services/historicalDataService.js';
+import { iniciarSincronizacionCloud } from './services/cloudStateService.js';
 import {
   crearWebSocket, suscribirTicks, solicitarPortfolio, suscribirContrato,
   cerrarContrato,
@@ -59,6 +60,15 @@ const marketCalibrationStore = createMarketCalibrationStore({
 const globalRiskManager = createGlobalRiskManager({
   storageKey: GLOBAL_RISK_STORAGE_KEY,
 });
+
+await iniciarSincronizacionCloud([
+  STORAGE_KEY,
+  SIM_STORAGE_KEY,
+  EXECUTION_STORAGE_KEY,
+  SIGNAL_CONFIG_STORAGE_KEY,
+  MARKET_CALIBRATION_STORAGE_KEY,
+  GLOBAL_RISK_STORAGE_KEY,
+]);
 
 function renderRegistroEjecuciones(registros) {
   renderExecutionTable({

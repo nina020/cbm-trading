@@ -20,6 +20,7 @@
     "@deriv/deriv-api": "^1.0.15",
     "dotenv": "^17.4.2",
     "lightweight-charts": "^3.8.0",
+    "pg": "^8.21.0",
     "ws": "^8.21.0"
   }
 }

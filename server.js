@@ -1,6 +1,7 @@
 const http = require('node:http');
 const fs = require('node:fs/promises');
 const path = require('node:path');
+const cloudStateStore = require('./cloudStateStore');
 
 const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || '0.0.0.0';
@@ -15,6 +16,19 @@ const CHARTS_PATH = path.join(
   'node_modules/lightweight-charts/dist/lightweight-charts.standalone.production.js',
 );
 const PUBLIC_JS_ROOTS = ['components', 'services', 'trading'];
+
+async function readJson(req) {
+  const chunks = [];
+  for await (const chunk of req) chunks.push(chunk);
+  if (!chunks.length) return {};
+  try {
+    return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+  } catch {
+    const error = new Error('JSON inválido');
+    error.statusCode = 400;
+    throw error;
+  }
+}
 
 function sendJson(res, status, body) {
   res.writeHead(status, {
@@ -79,6 +93,35 @@ async function derivFetch(url, options = {}) {
 }
 
 async function handleApi(req, res) {
+  if (req.url === '/api/state' && req.method === 'GET') {
+    sendJson(res, 200, { items: await cloudStateStore.listar() });
+    return;
+  }
+
+  if (req.url?.startsWith('/api/state/')) {
+    const key = decodeURIComponent(req.url.slice('/api/state/'.length));
+    if (req.method === 'GET') {
+      const item = await cloudStateStore.obtener(key);
+      if (!item) {
+        sendJson(res, 404, { error: 'Estado no encontrado' });
+        return;
+      }
+      sendJson(res, 200, item);
+      return;
+    }
+    if (req.method === 'PUT') {
+      const body = await readJson(req);
+      const item = await cloudStateStore.guardar(key, body.value);
+      sendJson(res, 200, item);
+      return;
+    }
+    if (req.method === 'DELETE') {
+      await cloudStateStore.eliminar(key);
+      sendJson(res, 200, { ok: true });
+      return;
+    }
+  }
+
   if (req.method !== 'GET') {
     sendJson(res, 405, { error: 'Método no permitido' });
     return;

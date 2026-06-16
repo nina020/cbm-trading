@@ -30,14 +30,25 @@ npm run check
 
 ## Despliegue en Render
 
-El archivo `render.yaml` define un servicio web Node.js con HTTPS y comprobación
-de salud en `/health`.
+El archivo `render.yaml` define un servicio web Node.js con HTTPS, PostgreSQL y
+comprobación de salud en `/health`.
 
 1. Sube este proyecto a un repositorio privado de GitHub.
 2. En Render, crea un Blueprint desde el repositorio.
 3. Introduce las cinco variables privadas solicitadas.
 4. Espera a que `/health` indique `{"status":"ok"}`.
 
-El historial y la configuración del navegador todavía son locales a cada
-computadora. Su sincronización corresponde a la siguiente fase con usuarios y
-base de datos.
+## Sincronización entre computadoras
+
+Cuando `DATABASE_URL` está disponible, el servidor crea la tabla `app_state` y
+sincroniza estas claves:
+
+- Historial de señales.
+- Registro de ejecuciones.
+- Posiciones simuladas.
+- Calidad de señales.
+- Calibraciones por mercado.
+- Límites globales de riesgo.
+
+En desarrollo local, si no hay `DATABASE_URL`, se usa `.data/cloud-state.json`
+como respaldo.
