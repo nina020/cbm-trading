@@ -1,7 +1,8 @@
 import {
   INTERVALO_VELA, MAX_HISTORIAL_VISIBLE, RATIO_RECOMPENSA, MULTIPLICADOR_DEFAULT,
   STORAGE_KEY, SIM_STORAGE_KEY,
-  EXECUTION_STORAGE_KEY, SIGNAL_CONFIG_STORAGE_KEY, MARKET_CALIBRATION_STORAGE_KEY,
+  EXECUTION_STORAGE_KEY, SIGNAL_CONFIG_STORAGE_KEY, STRATEGY_CONFIG_STORAGE_KEY,
+  MARKET_CALIBRATION_STORAGE_KEY,
   GLOBAL_RISK_STORAGE_KEY, NOMBRES_SIMBOLOS, MERCADOS_ESTABLES, TEMAS,
 } from './config.js';
 import { obtenerCuenta, obtenerWsUrl } from './services/derivApi.js';
@@ -22,6 +23,9 @@ import { calcularMA, calcularRSI, calcularDesviacion, evaluarSenal } from './tra
 import {
   SIGNAL_CONFIG_DEFAULTS, createSignalTrigger, normalizarSignalConfig, puntuarSenal,
 } from './trading/signalScorer.js';
+import {
+  STRATEGY_CONFIG_DEFAULTS, evaluarReglasEstrategia, normalizarStrategyConfig,
+} from './trading/strategyRules.js';
 import { createMarketCalibrationStore } from './trading/marketCalibration.js';
 import { ejecutarComparativaBacktest } from './trading/backtestEngine.js';
 import { createGlobalRiskManager } from './trading/globalRiskManager.js';
@@ -51,8 +55,10 @@ let contratosRealesAbiertos = [];
 let positionChart = null;
 let cooldownAutoSeg = 60;
 let signalConfig = { ...SIGNAL_CONFIG_DEFAULTS };
+let strategyConfig = { ...STRATEGY_CONFIG_DEFAULTS };
 let ultimoBacktest = null;
 const estadosAutomaticos = {};
+const notificacionesOportunidad = {};
 const riskManager = createRiskManager({ saldoInicial: saldoReal });
 const marketCalibrationStore = createMarketCalibrationStore({
   storageKey: MARKET_CALIBRATION_STORAGE_KEY,
@@ -66,6 +72,7 @@ await iniciarSincronizacionCloud([
   SIM_STORAGE_KEY,
   EXECUTION_STORAGE_KEY,
   SIGNAL_CONFIG_STORAGE_KEY,
+  STRATEGY_CONFIG_STORAGE_KEY,
   MARKET_CALIBRATION_STORAGE_KEY,
   GLOBAL_RISK_STORAGE_KEY,
 ]);
@@ -265,6 +272,44 @@ function cargarSignalConfig() {
   }
 }
 
+function cargarStrategyConfig() {
+  try {
+    const guardada = JSON.parse(localStorage.getItem(STRATEGY_CONFIG_STORAGE_KEY) || '{}');
+    strategyConfig = normalizarStrategyConfig({ ...STRATEGY_CONFIG_DEFAULTS, ...guardada });
+  } catch (error) {
+    strategyConfig = { ...STRATEGY_CONFIG_DEFAULTS };
+    console.error('No se pudo cargar la configuración de estrategia:', error);
+  }
+}
+
+function solicitarPermisoNotificaciones() {
+  if (!('Notification' in window) || Notification.permission !== 'default') return;
+  Notification.requestPermission().catch(() => {});
+}
+
+function notificarOportunidadFueraHorario({ mercadoId, nombre, tipo, puntuacion, entrada }) {
+  if (!strategyConfig.notificarFueraHorario) return;
+  const clave = `${mercadoId}:${tipo}`;
+  const ahora = Date.now();
+  if (ahora - (notificacionesOportunidad[clave] || 0) < 15 * 60 * 1000) return;
+  notificacionesOportunidad[clave] = ahora;
+
+  const mensaje = `${nombre} ${tipo}: calidad ${puntuacion}/100 fuera del horario. Entrada aprox. ${Number(entrada).toFixed(3)}.`;
+  registrarLogAuto(`🔔 Oportunidad fuera de horario: ${mensaje}`, 'info');
+
+  if ('Notification' in window) {
+    if (Notification.permission === 'granted') {
+      new Notification('CBM Trading: oportunidad detectada', { body: mensaje });
+    } else if (Notification.permission === 'default') {
+      Notification.requestPermission().then(permission => {
+        if (permission === 'granted') {
+          new Notification('CBM Trading: oportunidad detectada', { body: mensaje });
+        }
+      }).catch(() => {});
+    }
+  }
+}
+
 function obtenerSignalConfigMercado(mercadoId) {
   const calibracion = marketCalibrationStore.obtener(mercadoId);
   if (!calibracion) return signalConfig;
@@ -318,6 +363,15 @@ function abrirConfiguracionSenales() {
   document.getElementById('signal-threshold').value = signalConfig.umbralMinimo;
   document.getElementById('signal-confirmations').value = signalConfig.confirmacionesRequeridas;
   document.getElementById('signal-filter-auto').checked = signalConfig.filtrarAutoTrading;
+  document.getElementById('strategy-use-schedule').checked = strategyConfig.usarHorario;
+  document.getElementById('strategy-start').value = strategyConfig.horaInicio;
+  document.getElementById('strategy-end').value = strategyConfig.horaFin;
+  document.getElementById('strategy-notify-offhours').checked = strategyConfig.notificarFueraHorario;
+  document.getElementById('strategy-max-hour').value = strategyConfig.maxOperacionesHora;
+  document.getElementById('strategy-max-day').value = strategyConfig.maxOperacionesDia;
+  document.querySelectorAll('[data-strategy-day]').forEach(input => {
+    input.checked = strategyConfig.diasPermitidos.includes(Number(input.value));
+  });
   renderCalibracionesMercado();
   document.getElementById('signal-config-modal').style.display = 'flex';
 }
@@ -336,10 +390,22 @@ function guardarConfiguracionSenales() {
     confirmacionesRequeridas: document.getElementById('signal-confirmations').value,
     filtrarAutoTrading: document.getElementById('signal-filter-auto').checked,
   });
+  strategyConfig = normalizarStrategyConfig({
+    usarHorario: document.getElementById('strategy-use-schedule').checked,
+    horaInicio: document.getElementById('strategy-start').value,
+    horaFin: document.getElementById('strategy-end').value,
+    diasPermitidos: Array.from(document.querySelectorAll('[data-strategy-day]:checked'))
+      .map(input => Number(input.value)),
+    notificarFueraHorario: document.getElementById('strategy-notify-offhours').checked,
+    maxOperacionesHora: document.getElementById('strategy-max-hour').value,
+    maxOperacionesDia: document.getElementById('strategy-max-day').value,
+  });
   localStorage.setItem(SIGNAL_CONFIG_STORAGE_KEY, JSON.stringify(signalConfig));
+  localStorage.setItem(STRATEGY_CONFIG_STORAGE_KEY, JSON.stringify(strategyConfig));
   cerrarConfiguracionSenales();
+  if (strategyConfig.notificarFueraHorario) solicitarPermisoNotificaciones();
   registrarLogAuto(
-    `Calidad de señales: mínimo ${signalConfig.umbralMinimo}/100 y ${signalConfig.confirmacionesRequeridas} confirmaciones.`,
+    `Estrategia actualizada: mínimo ${signalConfig.umbralMinimo}/100, ${signalConfig.confirmacionesRequeridas} confirmaciones, horario ${strategyConfig.usarHorario ? `${strategyConfig.horaInicio}-${strategyConfig.horaFin}` : 'sin restricción'}.`,
     'success',
   );
 }
@@ -1201,20 +1267,44 @@ async function agregarMercado() {
         }
 
         const configMercado = obtenerSignalConfigMercado(id);
+        const reglasEstrategia = evaluarReglasEstrategia({
+          config: strategyConfig,
+          registros: executionJournal.registros,
+        });
+        const autoActivo = autoTrader.estaActivo(id);
         const disparo = signalTrigger.evaluar({
           tipo: tipoSenal,
           puntuacion: resultadoSenal.calidad.puntuacion,
-          activo: autoTrader.estaActivo(id),
+          activo: autoActivo && reglasEstrategia.permitido,
           config: configMercado,
         });
         actualizarPanelAutomatico(id, {
-          activo: autoTrader.estaActivo(id),
+          activo: autoActivo,
           tipo: tipoSenal,
           puntuacion: resultadoSenal.calidad.puntuacion,
           confirmaciones: disparo.confirmaciones,
           cooldownRestante: autoTrader.cooldownRestante(id),
-          estadoForzado: null,
+          estadoForzado: autoActivo && tipoSenal !== 'WAIT' && !reglasEstrategia.permitido
+            ? reglasEstrategia.codigo
+            : null,
+          motivoForzado: reglasEstrategia.motivo,
         });
+        if (
+          autoActivo
+          && tipoSenal !== 'WAIT'
+          && disparo.superaUmbral
+          && disparo.confirmada
+          && !reglasEstrategia.permitido
+          && reglasEstrategia.codigo === 'schedule'
+        ) {
+          notificarOportunidadFueraHorario({
+            mercadoId: id,
+            nombre,
+            tipo: tipoSenal,
+            puntuacion: resultadoSenal.calidad.puntuacion,
+            entrada: precio,
+          });
+        }
         if (disparo.ejecutar) {
           actualizarPanelAutomatico(id, { estadoForzado: 'opening' });
           registrarLogAuto(
@@ -1246,7 +1336,7 @@ async function agregarMercado() {
             });
         } else if (
           tipoSenal !== 'WAIT'
-          && autoTrader.estaActivo(id)
+          && autoActivo
           && disparo.confirmaciones === 1
         ) {
           registrarLogAuto(
@@ -1309,6 +1399,7 @@ function quitarMercado(id) {
 marketCalibrationStore.cargar();
 globalRiskManager.cargar();
 cargarSignalConfig();
+cargarStrategyConfig();
 cargarHistorialGuardado();
 executionJournal.cargar();
 simulationEngine.cargar();

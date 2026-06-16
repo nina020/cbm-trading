@@ -6,6 +6,7 @@ export function determinarEstadoAutomatico({
   confirmaciones = 0,
   cooldownRestante = 0,
   estadoForzado = null,
+  motivoForzado = null,
 }) {
   if (!activo) {
     return { codigo: 'off', titulo: 'Automático apagado', motivo: 'Activa la casilla para evaluar y ejecutar señales.' };
@@ -18,6 +19,12 @@ export function determinarEstadoAutomatico({
   }
   if (estadoForzado === 'error') {
     return { codigo: 'error', titulo: 'Error de ejecución', motivo: 'La operación podrá reintentarse si la señal continúa válida.' };
+  }
+  if (estadoForzado === 'schedule') {
+    return { codigo: 'schedule', titulo: 'Fuera de horario', motivo: motivoForzado || 'La señal se notificará, pero no se ejecutará automáticamente.' };
+  }
+  if (estadoForzado === 'frequency') {
+    return { codigo: 'frequency', titulo: 'Frecuencia limitada', motivo: motivoForzado || 'La señal cumple, pero se alcanzó el límite configurado.' };
   }
   if (tipo === 'WAIT') {
     return { codigo: 'waiting', titulo: 'Esperando señal', motivo: 'Aún no hay una dirección BUY o SELL válida.' };

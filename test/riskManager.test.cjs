@@ -31,6 +31,7 @@ async function cargarModulo(rutaInicial) {
 }
 
 const riskManager = cargarModulo(path.join(__dirname, '../trading/riskManager.js'));
+const strategyRules = cargarModulo(path.join(__dirname, '../trading/strategyRules.js'));
 
 const operacionBuy = {
   tipo: 'BUY',
@@ -920,4 +921,62 @@ test('el gráfico de posiciones calcula la media móvil sobre los ticks visibles
     { time: 3, value: 20 },
     { time: 4, value: 30 },
   ]);
+});
+
+test('las reglas de estrategia bloquean el automático fuera del horario', async () => {
+  const { evaluarReglasEstrategia } = await strategyRules;
+  const resultado = evaluarReglasEstrategia({
+    config: {
+      usarHorario: true,
+      horaInicio: '08:00',
+      horaFin: '17:00',
+      diasPermitidos: [1, 2, 3, 4, 5],
+      maxOperacionesHora: 3,
+      maxOperacionesDia: 10,
+    },
+    fecha: new Date('2026-06-16T06:30:00'),
+  });
+
+  assert.equal(resultado.permitido, false);
+  assert.equal(resultado.codigo, 'schedule');
+});
+
+test('las reglas de estrategia respetan horarios que cruzan medianoche', async () => {
+  const { estaDentroDeHorario } = await strategyRules;
+  const config = {
+    usarHorario: true,
+    horaInicio: '22:00',
+    horaFin: '02:00',
+    diasPermitidos: [2],
+  };
+
+  assert.equal(estaDentroDeHorario(config, new Date('2026-06-16T23:30:00')), true);
+  assert.equal(estaDentroDeHorario(config, new Date('2026-06-16T03:00:00')), false);
+});
+
+test('las reglas de estrategia limitan la frecuencia automática por hora y día', async () => {
+  const { evaluarReglasEstrategia } = await strategyRules;
+  const fecha = new Date('2026-06-16T10:00:00');
+  const registros = [
+    { origen: 'automatica', abiertaEn: '2026-06-16T09:20:00' },
+    { origen: 'automatica', abiertaEn: '2026-06-16T09:45:00' },
+    { origen: 'manual', abiertaEn: '2026-06-16T09:50:00' },
+  ];
+
+  const resultado = evaluarReglasEstrategia({
+    config: {
+      usarHorario: true,
+      horaInicio: '08:00',
+      horaFin: '17:00',
+      diasPermitidos: [2],
+      maxOperacionesHora: 2,
+      maxOperacionesDia: 10,
+    },
+    registros,
+    fecha,
+  });
+
+  assert.equal(resultado.permitido, false);
+  assert.equal(resultado.codigo, 'frequency');
+  assert.equal(resultado.conteo.hora, 2);
 });

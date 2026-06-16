@@ -57,7 +57,7 @@ body { background: var(--bg-page); color: var(--text-primary); transition: backg
 .config-row { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
 .config-group { display: flex; flex-direction: column; gap: 4px; }
 .config-group label { font-size: 11px; color: var(--text-secondary); white-space: nowrap; }
-.config-group select, .config-group input[type="number"] { padding: 7px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; background: var(--bg-stat); color: var(--text-primary); }
+.config-group select, .config-group input[type="number"], .config-group input[type="time"] { padding: 7px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; background: var(--bg-stat); color: var(--text-primary); }
 .config-group.market select { width: 200px; }
 .config-group.period select { width: 150px; }
 .config-group.num input { width: 80px; }
@@ -175,7 +175,7 @@ body { background: var(--bg-page); color: var(--text-primary); transition: backg
 .auto-status-reason { margin-top: 7px; font-size: 10px; color: var(--text-secondary); }
 .auto-status-source { margin-top: 3px; font-size: 9px; color: var(--text-faint); text-align: right; }
 .auto-status-off strong, .auto-status-waiting strong { color: var(--text-secondary); }
-.auto-status-quality strong, .auto-status-confirming strong, .auto-status-cooldown strong { color: #d68000; }
+.auto-status-quality strong, .auto-status-confirming strong, .auto-status-cooldown strong, .auto-status-schedule strong, .auto-status-frequency strong { color: #d68000; }
 .auto-status-ready strong, .auto-status-opening strong, .auto-status-executed strong { color: #26a69a; }
 .auto-status-error strong { color: #ef5350; }
 .signal { display: flex; align-items: center; gap: 6px; padding: 7px 10px; border-radius: 6px; font-size: 13px; font-weight: 500; margin-bottom: 6px; }
@@ -208,6 +208,9 @@ body { background: var(--bg-page); color: var(--text-primary); transition: backg
 .modal-header h2 { font-size: 16px; font-weight: 600; color: var(--text-primary); }
 .modal-close { background: var(--bg-stat); border: 1px solid var(--border); border-radius: 6px; padding: 6px 12px; cursor: pointer; color: var(--text-primary); font-size: 13px; }
 .modal-close:hover { border-color: #ef5350; color: #ef5350; }
+.strategy-days { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 8px; }
+.strategy-days label { display: flex; align-items: center; gap: 6px; padding: 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-stat); font-size: 11px; color: var(--text-secondary); cursor: pointer; }
+.strategy-days input { width: 14px; height: 14px; }
 .history-table-wrap { background: var(--bg-stat); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; overflow-x: auto; }
 table.history-table { width: 100%; border-collapse: collapse; font-size: 12px; min-width: 650px; }
 table.history-table th { text-align: left; padding: 10px 12px; color: var(--text-faint); font-weight: 500; border-bottom: 1px solid var(--border); white-space: nowrap; }
@@ -492,7 +495,7 @@ table.history-table tr:last-child td { border-bottom: none; }
 </div>
 
 <div class="modal-overlay" id="signal-config-modal" onclick="cerrarConfiguracionSenalesClick(event)">
-  <div class="modal-content" style="max-width:620px">
+  <div class="modal-content" style="max-width:760px">
     <div class="modal-header">
       <h2>Configuración de calidad de señales</h2>
       <button class="modal-close" onclick="cerrarConfiguracionSenales()">✕ Cerrar</button>
@@ -511,8 +514,44 @@ table.history-table tr:last-child td { border-bottom: none; }
       <input type="checkbox" id="signal-filter-auto">
       Aplicar este filtro a las ejecuciones automáticas
     </label>
+    <div class="backtest-section-title">Horario y frecuencia del automático</div>
+    <label class="auto-toggle-label" style="margin-bottom:12px">
+      <input type="checkbox" id="strategy-use-schedule">
+      Operar solo dentro del horario configurado
+    </label>
+    <div class="risk-limits-grid" style="display:grid;grid-template-columns:repeat(2,minmax(180px,1fr));gap:14px">
+      <div class="config-group">
+        <label>Hora de inicio</label>
+        <input type="time" id="strategy-start">
+      </div>
+      <div class="config-group">
+        <label>Hora de cierre</label>
+        <input type="time" id="strategy-end">
+      </div>
+      <div class="config-group">
+        <label>Máximo automático por hora</label>
+        <input type="number" id="strategy-max-hour" min="1" max="100" step="1">
+      </div>
+      <div class="config-group">
+        <label>Máximo automático por día</label>
+        <input type="number" id="strategy-max-day" min="1" max="500" step="1">
+      </div>
+    </div>
+    <div class="strategy-days">
+      <label><input type="checkbox" data-strategy-day value="1">Lun</label>
+      <label><input type="checkbox" data-strategy-day value="2">Mar</label>
+      <label><input type="checkbox" data-strategy-day value="3">Mié</label>
+      <label><input type="checkbox" data-strategy-day value="4">Jue</label>
+      <label><input type="checkbox" data-strategy-day value="5">Vie</label>
+      <label><input type="checkbox" data-strategy-day value="6">Sáb</label>
+      <label><input type="checkbox" data-strategy-day value="0">Dom</label>
+    </div>
+    <label class="auto-toggle-label" style="margin-top:16px">
+      <input type="checkbox" id="strategy-notify-offhours">
+      Si aparece una buena oportunidad fuera de horario, avisarme sin abrir operación
+    </label>
     <div class="risk-note" style="margin-top:12px">
-      La puntuación combina tendencia, RSI, momentum y consistencia. Es una medida de calidad, no una garantía de ganancia.
+      La puntuación combina tendencia, RSI, momentum y consistencia. El horario y la frecuencia controlan solo el automático; fuera de horario puede avisar, pero no ejecuta.
     </div>
     <div class="backtest-section-title">Calibraciones guardadas por mercado</div>
     <div id="market-calibration-list" class="positions-empty">No hay calibraciones guardadas.</div>
