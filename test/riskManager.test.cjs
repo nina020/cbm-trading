@@ -759,6 +759,39 @@ test('el ranking reduce el peso de historiales pequeños y espera datos de preci
   assert.equal(sinPrecio.nivel, 'recopilando');
 });
 
+test('el ranking ajusta la recomendación por umbral y estado operativo', async () => {
+  const { evaluarMercadoParaInicio } = await cargarModulo(
+    path.join(__dirname, '../trading/marketRanking.js'),
+  );
+  const base = {
+    id: 'TEST',
+    nombre: 'Prueba',
+    perfil: 'estable',
+    precio: 100,
+    desviacion: 0.05,
+    calidad: 82,
+    signalConfig: { umbralMinimo: 80 },
+    registros: [],
+  };
+  const disponible = evaluarMercadoParaInicio({
+    ...base,
+    estrategia: { permitido: true, codigo: 'ready', motivo: 'Disponible' },
+  });
+  const fueraHorario = evaluarMercadoParaInicio({
+    ...base,
+    estrategia: { permitido: false, codigo: 'schedule', motivo: 'Fuera de horario' },
+  });
+  const debajoUmbral = evaluarMercadoParaInicio({
+    ...base,
+    calidad: 65,
+    estrategia: { permitido: true, codigo: 'ready', motivo: 'Disponible' },
+  });
+
+  assert.ok(disponible.puntuacion > fueraHorario.puntuacion);
+  assert.equal(fueraHorario.nivel, 'considerar');
+  assert.ok(disponible.puntuacion > debajoUmbral.puntuacion);
+});
+
 test('el escáner calcula estabilidad y calidad desde ticks históricos', async () => {
   const { analizarMercadoHistorico } = await cargarModulo(
     path.join(__dirname, '../trading/marketScanner.js'),

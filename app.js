@@ -89,14 +89,21 @@ function renderRegistroEjecuciones(registros) {
 }
 
 function renderRankingMercados() {
+  const estadoEstrategia = evaluarReglasEstrategia({
+    config: strategyConfig,
+    registros: executionJournal.registros,
+  });
   const mercados = mercadosEscaneados.map(mercado => {
     const mercadoActivo = mercadosActivos[mercado.id];
+    const calibracion = marketCalibrationStore.obtener(mercado.id);
     return {
       ...mercado,
       precio: mercadoActivo?.precio ?? mercado.precio,
       desviacion: mercadoActivo?.desviacion ?? mercado.desviacion,
       calidad: mercadoActivo?.calidad ?? mercado.calidad,
-      calibracion: marketCalibrationStore.obtener(mercado.id),
+      calibracion,
+      signalConfig: obtenerSignalConfigMercado(mercado.id),
+      estrategia: estadoEstrategia,
       registros: executionJournal.registros,
     };
   });

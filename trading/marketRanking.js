@@ -27,6 +27,8 @@ export function evaluarMercadoParaInicio({
   desviacion,
   calidad = 0,
   calibracion = null,
+  signalConfig = null,
+  estrategia = null,
   registros = [],
 }) {
   const precioNumero = Number(precio);
@@ -45,15 +47,28 @@ export function evaluarMercadoParaInicio({
     ? 0
     : (historial.winRate / 100) * confianzaMuestra * 15;
   const puntosCalibracion = calibracion ? 10 : 0;
-  const puntuacion = Math.round(
+  const umbralMinimo = Number(calibracion?.umbralMinimo ?? signalConfig?.umbralMinimo);
+  const ajusteUmbral = Number.isFinite(umbralMinimo)
+    ? (Number(calidad) >= umbralMinimo
+      ? 5
+      : -limitar((umbralMinimo - Number(calidad)) * 0.6, 0, 12))
+    : 0;
+  const ajusteEstrategia = estrategia
+    ? (estrategia.permitido ? 3 : (estrategia.codigo === 'schedule' ? -8 : -12))
+    : 0;
+  const puntuacionBase = Math.round(
     puntosPerfil(perfil)
     + puntosEstabilidad
     + puntosCalidad
     + puntosHistorial
-    + puntosCalibracion,
+    + puntosCalibracion
+    + ajusteUmbral
+    + ajusteEstrategia,
   );
+  const puntuacion = limitar(puntuacionBase, 0, 100);
 
   const nivel = !listo ? 'recopilando'
+    : estrategia && !estrategia.permitido ? 'considerar'
     : puntuacion >= 75 ? 'recomendable'
     : puntuacion >= 60 ? 'considerar'
     : 'observar';
@@ -68,6 +83,12 @@ export function evaluarMercadoParaInicio({
     calidad: Number(calidad) || 0,
     volatilidadRelativa,
     calibrado: Boolean(calibracion),
+    umbralMinimo: Number.isFinite(umbralMinimo) ? umbralMinimo : null,
+    estrategia: estrategia ? {
+      permitido: estrategia.permitido,
+      codigo: estrategia.codigo,
+      motivo: estrategia.motivo,
+    } : null,
     historial,
   };
 }

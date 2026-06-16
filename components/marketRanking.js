@@ -9,6 +9,14 @@ function etiquetaNivel(nivel) {
   return 'Recopilando datos';
 }
 
+function etiquetaEstrategia(estrategia) {
+  if (!estrategia) return 'No evaluada';
+  if (estrategia.permitido) return 'Disponible';
+  if (estrategia.codigo === 'schedule') return 'Fuera de horario';
+  if (estrategia.codigo === 'frequency') return 'Frecuencia limitada';
+  return 'Pausada';
+}
+
 export function renderMarketRanking(contenedor, mercados) {
   if (!contenedor) return;
   if (!mercados.length) {
@@ -27,7 +35,10 @@ export function renderMarketRanking(contenedor, mercados) {
       <div class="market-rank-details">
         <div class="market-rank-metric"><small>Estabilidad</small><b>${volatilidad(mercado.volatilidadRelativa)}</b></div>
         <div class="market-rank-metric"><small>Calidad</small><b>${mercado.calidad}/100</b></div>
+        <div class="market-rank-metric"><small>Umbral</small><b>${mercado.umbralMinimo ? `${mercado.umbralMinimo}/100` : 'Global'}</b></div>
         <div class="market-rank-metric"><small>Historial</small><b>${mercado.historial.total ? `${mercado.historial.winRate.toFixed(0)}%` : 'Sin datos'}</b></div>
+        <div class="market-rank-metric"><small>Operativa</small><b>${etiquetaEstrategia(mercado.estrategia)}</b></div>
+        <div class="market-rank-metric"><small>Base</small><b>${mercado.calibrado ? 'Calibrado' : 'Sin calibrar'}</b></div>
       </div>
       <div class="market-rank-actions">
         <small>Recomendación ${index + 1}</small>
