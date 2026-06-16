@@ -196,6 +196,11 @@ body { background: var(--bg-page); color: var(--text-primary); transition: backg
 .trade-plan-extra { background: var(--bg-stat); border-radius: 6px; padding: 8px 10px; margin-top: 6px; display: flex; align-items: center; justify-content: space-between; }
 .trade-plan-extra-label { font-size: 11px; color: var(--text-secondary); }
 .trade-plan-extra-value { font-size: 14px; font-weight: 600; color: #26a69a; }
+.opportunity-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 14px 0; }
+.opportunity-item { background: var(--bg-stat); border: 1px solid var(--border); border-radius: 8px; padding: 10px; }
+.opportunity-item small { display: block; color: var(--text-faint); font-size: 10px; }
+.opportunity-item b { display: block; margin-top: 4px; color: var(--text-primary); font-size: 15px; }
+.opportunity-warning { padding: 10px 12px; border-radius: 8px; border: 1px solid rgba(255,176,32,.4); background: rgba(255,176,32,.1); color: var(--text-secondary); font-size: 12px; line-height: 1.35; }
 .btn-execute { width: 100%; margin-top: 8px; background: #2962ff; color: #fff; border: none; border-radius: 6px; padding: 9px; font-size: 12px; font-weight: 600; cursor: pointer; }
 .btn-execute:hover { background: #1e4fd6; }
 .btn-execute:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -490,6 +495,34 @@ table.history-table tr:last-child td { border-bottom: none; }
       <div class="backtest-results" id="backtest-results">
         <div class="positions-empty">Selecciona la configuración y ejecuta el backtest.</div>
       </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="offhours-modal" onclick="cerrarOportunidadFueraHorarioClick(event)">
+  <div class="modal-content" style="max-width:680px">
+    <div class="modal-header">
+      <h2>Oportunidad fuera de horario</h2>
+      <button class="modal-close" onclick="cerrarOportunidadFueraHorario()">✕ Cerrar</button>
+    </div>
+    <div class="opportunity-warning">
+      La señal cumple las reglas de calidad, pero apareció fuera del horario automático. La app no invierte sola: tú decides si quieres entrar ahora.
+    </div>
+    <div class="opportunity-grid">
+      <div class="opportunity-item"><small>Mercado</small><b id="offhours-market">—</b></div>
+      <div class="opportunity-item"><small>Dirección</small><b id="offhours-type">—</b></div>
+      <div class="opportunity-item"><small>Calidad</small><b id="offhours-quality">—</b></div>
+      <div class="opportunity-item"><small>Entrada aprox.</small><b id="offhours-entry">—</b></div>
+      <div class="opportunity-item"><small>Stop loss</small><b id="offhours-sl">—</b></div>
+      <div class="opportunity-item"><small>Take profit</small><b id="offhours-tp">—</b></div>
+      <div class="opportunity-item"><small>Inversión</small><b id="offhours-stake">—</b></div>
+      <div class="opportunity-item"><small>Riesgo máximo</small><b id="offhours-risk">—</b></div>
+      <div class="opportunity-item"><small>Objetivo</small><b id="offhours-target">—</b></div>
+    </div>
+    <div class="risk-note">Modo actual: <b id="offhours-mode">—</b>. Cambia el modo arriba antes de confirmar si quieres usar simulación o cuenta demo real.</div>
+    <div style="margin-top:16px;display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap">
+      <button class="modal-close" onclick="cerrarOportunidadFueraHorario()">Descartar</button>
+      <button class="btn-add" id="offhours-action" onclick="invertirOportunidadFueraHorario()">Invertir ahora</button>
     </div>
   </div>
 </div>

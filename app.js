@@ -59,6 +59,7 @@ let strategyConfig = { ...STRATEGY_CONFIG_DEFAULTS };
 let ultimoBacktest = null;
 const estadosAutomaticos = {};
 const notificacionesOportunidad = {};
+let oportunidadFueraHorario = null;
 const riskManager = createRiskManager({ saldoInicial: saldoReal });
 const marketCalibrationStore = createMarketCalibrationStore({
   storageKey: MARKET_CALIBRATION_STORAGE_KEY,
@@ -296,16 +297,104 @@ function notificarOportunidadFueraHorario({ mercadoId, nombre, tipo, puntuacion,
 
   const mensaje = `${nombre} ${tipo}: calidad ${puntuacion}/100 fuera del horario. Entrada aprox. ${Number(entrada).toFixed(3)}.`;
   registrarLogAuto(`🔔 Oportunidad fuera de horario: ${mensaje}`, 'info');
+  mostrarOportunidadFueraHorario({
+    mercadoId,
+    nombre,
+    tipo,
+    puntuacion,
+    entrada,
+  });
 
   if ('Notification' in window) {
     if (Notification.permission === 'granted') {
-      new Notification('CBM Trading: oportunidad detectada', { body: mensaje });
+      new Notification('CBM Trading: oportunidad detectada', {
+        body: `${mensaje} Confirma en la app si quieres invertir.`,
+      });
     } else if (Notification.permission === 'default') {
       Notification.requestPermission().then(permission => {
         if (permission === 'granted') {
-          new Notification('CBM Trading: oportunidad detectada', { body: mensaje });
+          new Notification('CBM Trading: oportunidad detectada', {
+            body: `${mensaje} Confirma en la app si quieres invertir.`,
+          });
         }
       }).catch(() => {});
+    }
+  }
+}
+
+function mostrarOportunidadFueraHorario({ mercadoId, nombre, tipo, puntuacion, entrada }) {
+  const mercado = mercadosActivos[mercadoId];
+  const desviacion = Number(mercado?.desviacion) || 0;
+  const sl = tipo === 'BUY' ? entrada - desviacion * 2 : entrada + desviacion * 2;
+  const tp = tipo === 'BUY' ? entrada + desviacion * 3 : entrada - desviacion * 3;
+  const inversion = calcularInversionSugerida();
+  const objetivos = calcularObjetivosMonetarios(inversion);
+
+  oportunidadFueraHorario = {
+    mercadoId,
+    nombre,
+    tipo,
+    puntuacion,
+    entrada,
+    sl,
+    tp,
+    inversion,
+    riesgo: objetivos.riesgo,
+    objetivo: objetivos.objetivo,
+    modo: modoEjecucion,
+  };
+
+  document.getElementById('offhours-market').textContent = nombre;
+  document.getElementById('offhours-type').textContent = tipo;
+  document.getElementById('offhours-quality').textContent = `${puntuacion}/100`;
+  document.getElementById('offhours-entry').textContent = Number(entrada).toFixed(3);
+  document.getElementById('offhours-sl').textContent = Number(sl).toFixed(3);
+  document.getElementById('offhours-tp').textContent = Number(tp).toFixed(3);
+  document.getElementById('offhours-stake').textContent = `$${inversion.toFixed(2)}`;
+  document.getElementById('offhours-risk').textContent = `$${objetivos.riesgo.toFixed(2)}`;
+  document.getElementById('offhours-target').textContent = `$${objetivos.objetivo.toFixed(2)}`;
+  document.getElementById('offhours-mode').textContent = modoEjecucion === 'demo'
+    ? 'Cuenta demo real'
+    : 'Simulación segura';
+  document.getElementById('offhours-action').textContent = modoEjecucion === 'demo'
+    ? 'Invertir ahora en demo'
+    : 'Abrir simulación ahora';
+  document.getElementById('offhours-modal').style.display = 'flex';
+}
+
+function cerrarOportunidadFueraHorario() {
+  document.getElementById('offhours-modal').style.display = 'none';
+}
+
+function cerrarOportunidadFueraHorarioClick(event) {
+  if (event.target.id === 'offhours-modal') cerrarOportunidadFueraHorario();
+}
+
+async function invertirOportunidadFueraHorario() {
+  if (!oportunidadFueraHorario) return;
+  const boton = document.getElementById('offhours-action');
+  const oportunidad = oportunidadFueraHorario;
+  if (boton) {
+    boton.disabled = true;
+    boton.textContent = 'Procesando...';
+  }
+
+  try {
+    const ejecutada = await ejecutarOperacion(
+      oportunidad.mercadoId,
+      oportunidad.tipo,
+      oportunidad.entrada,
+      oportunidad.sl,
+      oportunidad.tp,
+      'offhours-action',
+    );
+    if (ejecutada) cerrarOportunidadFueraHorario();
+  } finally {
+    if (boton) {
+      boton.disabled = false;
+      boton.textContent = modoEjecucion === 'demo'
+        ? 'Invertir ahora en demo'
+        : 'Abrir simulación ahora';
     }
   }
 }
@@ -1431,6 +1520,9 @@ Object.assign(window, {
   abrirBacktesting,
   cerrarBacktesting,
   cerrarBacktestingClick,
+  cerrarOportunidadFueraHorario,
+  cerrarOportunidadFueraHorarioClick,
+  invertirOportunidadFueraHorario,
   limpiarRegistroEjecuciones,
   alternarRegistroEjecuciones,
   cerrarEjecuciones,
