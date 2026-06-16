@@ -1179,11 +1179,17 @@ function renderHistorial() {
   const perdidas = historial.filter(h => h.estado === 'perdida').length;
   const resueltas = ganadas + perdidas;
   const winrate = resueltas > 0 ? ((ganadas / resueltas) * 100).toFixed(1) + '%' : '—';
+  const perdidaAcumulada = historial.reduce((totalPerdido, h) => {
+    const pnl = Number(h.pnl);
+    return Number.isFinite(pnl) && pnl < 0 ? totalPerdido + Math.abs(pnl) : totalPerdido;
+  }, 0);
 
   document.getElementById('hist-total').textContent = total;
   document.getElementById('hist-ganadas').textContent = ganadas;
   document.getElementById('hist-perdidas').textContent = perdidas;
   document.getElementById('hist-winrate').textContent = winrate;
+  document.getElementById('hist-loss-amount').textContent =
+    `$${perdidaAcumulada.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   guardarHistorial();
 }
