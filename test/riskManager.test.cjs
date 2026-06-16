@@ -218,6 +218,29 @@ test('la orden demo usa los mismos objetivos monetarios que la simulación', asy
   assert.equal(payload.limit_order.take_profit, 27);
 });
 
+test('la orden demo redondea montos a 2 decimales para Deriv', async () => {
+  const { crearPayload } = await cargarModulo(
+    path.join(__dirname, '../trading/orderService.js'),
+  );
+  const payload = crearPayload({
+    mercadoId: 'TEST',
+    contractType: 'MULTUP',
+    stake: 119.968,
+    entrada: 100,
+    sl: 99,
+    tp: 101.5,
+    multiplicador: 100,
+    limitesMinimos: {
+      stop_loss: 0.12345,
+      take_profit: 0.12345,
+    },
+  });
+
+  assert.equal(payload.amount, 119.97);
+  assert.equal(payload.limit_order.stop_loss, 107.97);
+  assert.equal(payload.limit_order.take_profit, 161.96);
+});
+
 test('la cotización conserva multiplicador y solo suma costos explícitos', async () => {
   const { normalizarCotizacion, extraerCostosReportados } = await cargarModulo(
     path.join(__dirname, '../trading/orderService.js'),

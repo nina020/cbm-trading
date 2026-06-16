@@ -14,6 +14,12 @@ function numeroFinito(value) {
   return Number.isFinite(numero) ? numero : null;
 }
 
+function redondearMonto(value) {
+  const numero = Number(value);
+  if (!Number.isFinite(numero)) return 0;
+  return Math.round((numero + Number.EPSILON) * 100) / 100;
+}
+
 export function extraerCostosReportados(data = {}) {
   const campos = ['commission', 'fee', 'contract_fee', 'transaction_fee'];
   const valores = campos
@@ -46,17 +52,20 @@ export function normalizarCotizacion(propuesta, multiplicador) {
 export function crearPayload({
   mercadoId, contractType, stake, entrada, sl, tp, multiplicador, limitesMinimos = {},
 }) {
-  const { riesgo: riesgoMonetario, objetivo: objetivoMonetario } = calcularObjetivosMonetarios(stake);
+  const stakeRedondeado = redondearMonto(stake);
+  const { riesgo: riesgoMonetario, objetivo: objetivoMonetario } = calcularObjetivosMonetarios(stakeRedondeado);
+  const stopLossMinimo = redondearMonto(limitesMinimos.stop_loss || 0.1);
+  const takeProfitMinimo = redondearMonto(limitesMinimos.take_profit || 0.1);
   return {
-    amount: stake,
+    amount: stakeRedondeado,
     basis: 'stake',
     contract_type: contractType,
     currency: 'USD',
     multiplier: multiplicador,
     underlying_symbol: mercadoId,
     limit_order: {
-      stop_loss: Math.max(limitesMinimos.stop_loss || 0.1, Number(riesgoMonetario.toFixed(2))),
-      take_profit: Math.max(limitesMinimos.take_profit || 0.1, Number(objetivoMonetario.toFixed(2))),
+      stop_loss: Math.max(stopLossMinimo, redondearMonto(riesgoMonetario)),
+      take_profit: Math.max(takeProfitMinimo, redondearMonto(objetivoMonetario)),
     },
   };
 }
