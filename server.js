@@ -8,6 +8,10 @@ const HOST = process.env.HOST || '0.0.0.0';
 const TOKEN = process.env.DERIV_TOKEN;
 const APP_ID = process.env.DERIV_APP_ID;
 const ACCOUNT_ID = process.env.DERIV_ACCOUNT_ID;
+const DEMO_TOKEN = process.env.DERIV_DEMO_TOKEN || TOKEN;
+const DEMO_ACCOUNT_ID = process.env.DERIV_DEMO_ACCOUNT_ID || ACCOUNT_ID;
+const REAL_TOKEN = process.env.DERIV_REAL_TOKEN;
+const REAL_ACCOUNT_ID = process.env.DERIV_REAL_ACCOUNT_ID;
 const APP_USERNAME = process.env.APP_USERNAME;
 const APP_PASSWORD = process.env.APP_PASSWORD;
 const INDEX_PATH = path.join(__dirname, 'index.html');
@@ -66,19 +70,29 @@ function solicitarAutenticacion(res) {
   res.end('Autenticación requerida');
 }
 
+function obtenerCredencialesDeriv(modo = 'demo') {
+  const real = modo === 'real';
+  return {
+    token: real ? REAL_TOKEN : DEMO_TOKEN,
+    accountId: real ? REAL_ACCOUNT_ID : DEMO_ACCOUNT_ID,
+    modo: real ? 'real' : 'demo',
+  };
+}
+
 async function derivFetch(url, options = {}) {
-  if (!TOKEN || !APP_ID) {
-    const error = new Error('Faltan DERIV_TOKEN o DERIV_APP_ID en .env');
+  const { token = TOKEN, ...fetchOptions } = options;
+  if (!token || !APP_ID) {
+    const error = new Error('Faltan token de Deriv o DERIV_APP_ID en .env');
     error.statusCode = 500;
     throw error;
   }
 
   const response = await fetch(url, {
-    ...options,
+    ...fetchOptions,
     headers: {
-      Authorization: `Bearer ${TOKEN}`,
+      Authorization: `Bearer ${token}`,
       'Deriv-App-ID': APP_ID,
-      ...options.headers,
+      ...fetchOptions.headers,
     },
   });
   const data = await response.json();
@@ -93,6 +107,9 @@ async function derivFetch(url, options = {}) {
 }
 
 async function handleApi(req, res) {
+  const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+  const cuentaSolicitada = parsedUrl.searchParams.get('account') === 'real' ? 'real' : 'demo';
+
   if (req.url === '/api/state' && req.method === 'GET') {
     sendJson(res, 200, { items: await cloudStateStore.listar() });
     return;
@@ -127,18 +144,21 @@ async function handleApi(req, res) {
     return;
   }
 
-  if (req.url === '/api/account') {
-    if (!ACCOUNT_ID) {
-      sendJson(res, 500, { error: 'Falta DERIV_ACCOUNT_ID en las variables de entorno' });
+  if (parsedUrl.pathname === '/api/account') {
+    const credenciales = obtenerCredencialesDeriv(cuentaSolicitada);
+    if (!credenciales.accountId) {
+      sendJson(res, 500, { error: `Falta DERIV_${cuentaSolicitada.toUpperCase()}_ACCOUNT_ID en las variables de entorno` });
       return;
     }
-    const data = await derivFetch('https://api.derivws.com/trading/v1/options/accounts');
+    const data = await derivFetch('https://api.derivws.com/trading/v1/options/accounts', {
+      token: credenciales.token,
+    });
     const accounts = Array.isArray(data.data) ? data.data : [];
-    const account = accounts.find(item => item.account_id === ACCOUNT_ID)
-      || accounts.find(item => item.account_type === 'demo');
+    const account = accounts.find(item => item.account_id === credenciales.accountId)
+      || accounts.find(item => item.account_type === cuentaSolicitada);
 
     if (!account) {
-      sendJson(res, 404, { error: 'No se encontró una cuenta demo' });
+      sendJson(res, 404, { error: `No se encontró una cuenta ${cuentaSolicitada}` });
       return;
     }
 
@@ -147,18 +167,20 @@ async function handleApi(req, res) {
       balance: account.balance,
       currency: account.currency,
       accountType: account.account_type,
+      mode: cuentaSolicitada,
     });
     return;
   }
 
-  if (req.url === '/api/ws-url') {
-    if (!ACCOUNT_ID) {
-      sendJson(res, 500, { error: 'Falta DERIV_ACCOUNT_ID en las variables de entorno' });
+  if (parsedUrl.pathname === '/api/ws-url') {
+    const credenciales = obtenerCredencialesDeriv(cuentaSolicitada);
+    if (!credenciales.accountId) {
+      sendJson(res, 500, { error: `Falta DERIV_${cuentaSolicitada.toUpperCase()}_ACCOUNT_ID en las variables de entorno` });
       return;
     }
     const data = await derivFetch(
-      `https://api.derivws.com/trading/v1/options/accounts/${ACCOUNT_ID}/otp`,
-      { method: 'POST' },
+      `https://api.derivws.com/trading/v1/options/accounts/${credenciales.accountId}/otp`,
+      { method: 'POST', token: credenciales.token },
     );
 
     if (!data.data?.url) {

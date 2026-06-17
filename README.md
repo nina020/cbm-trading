@@ -1,6 +1,6 @@
 # CBM Trading
 
-Panel web para análisis, simulación y operación en cuenta demo de Deriv.
+Panel web para análisis, simulación, operación en cuenta demo y estructura de cuenta real controlada en Deriv.
 
 ## Desarrollo local
 
@@ -12,9 +12,12 @@ Panel web para análisis, simulación y operación en cuenta demo de Deriv.
 
 ## Variables requeridas
 
-- `DERIV_TOKEN`: token privado de Deriv.
 - `DERIV_APP_ID`: identificador de la aplicación Deriv.
-- `DERIV_ACCOUNT_ID`: identificador de la cuenta demo.
+- `DERIV_DEMO_TOKEN`: token privado de la cuenta demo de Deriv.
+- `DERIV_DEMO_ACCOUNT_ID`: identificador de la cuenta demo.
+- `DERIV_REAL_TOKEN`: token privado de la cuenta real de Deriv, solo si usarás modo real controlado.
+- `DERIV_REAL_ACCOUNT_ID`: identificador de la cuenta real, solo si usarás modo real controlado.
+- `DERIV_TOKEN` y `DERIV_ACCOUNT_ID`: compatibilidad anterior; si no configuras `DERIV_DEMO_*`, se usan como demo.
 - `APP_USERNAME`: usuario para proteger el sitio publicado.
 - `APP_PASSWORD`: contraseña larga y privada para acceder al sitio.
 - `PORT`: opcional localmente; el proveedor lo configura en producción.
@@ -35,7 +38,7 @@ comprobación de salud en `/health`.
 
 1. Sube este proyecto a un repositorio privado de GitHub.
 2. En Render, crea un Blueprint desde el repositorio.
-3. Introduce las cinco variables privadas solicitadas.
+3. Introduce las variables privadas solicitadas. Las variables reales son opcionales hasta activar cuenta real controlada.
 4. Espera a que `/health` indique `{"status":"ok"}`.
 
 ## Sincronización entre computadoras

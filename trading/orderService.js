@@ -77,8 +77,9 @@ async function procesarOrden({
   entrada,
   sl,
   tp,
+  accountMode = 'demo',
 }, comprar, { confirmarCotizacion } = {}) {
-  const wsUrl = await obtenerWsUrl();
+  const wsUrl = await obtenerWsUrl(accountMode);
   const contractType = tipo === 'BUY' ? 'MULTUP' : 'MULTDOWN';
 
   return new Promise((resolve, reject) => {

@@ -5,11 +5,15 @@ async function requestJson(url) {
   return data;
 }
 
-export async function obtenerWsUrl() {
-  const data = await requestJson('/api/ws-url');
+function accountQuery(accountMode) {
+  return accountMode ? `?account=${encodeURIComponent(accountMode)}` : '';
+}
+
+export async function obtenerWsUrl(accountMode = 'demo') {
+  const data = await requestJson(`/api/ws-url${accountQuery(accountMode)}`);
   return data.url;
 }
 
-export function obtenerCuenta() {
-  return requestJson('/api/account');
+export function obtenerCuenta(accountMode = 'demo') {
+  return requestJson(`/api/account${accountQuery(accountMode)}`);
 }

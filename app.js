@@ -49,6 +49,7 @@ let mercadosEscaneados = [];
 let historial = [];
 let historialId = 0;
 let modoEjecucion = 'simulacion';
+const REAL_CONTROLADO_MAX_STAKE = 2;
 let saldoReal = 10000;
 let saldoRealInicial = null;
 let portfolioWs = null;
@@ -770,13 +771,40 @@ function aplicarCalibracionBacktest() {
 }
 
 function cambiarModoEjecucion(modo) {
-  modoEjecucion = modo === 'demo' ? 'demo' : 'simulacion';
+  if (modo === 'real') {
+    const aceptar = confirm(
+      'Activar Cuenta real controlada requiere dinero real.\n\n'
+      + 'Reglas de seguridad:\n'
+      + '- Solo operaciones manuales.\n'
+      + '- Máximo $2 por operación.\n'
+      + '- Automático bloqueado.\n'
+      + '- Debes confirmar cada orden.\n\n'
+      + '¿Quieres activar este modo?',
+    );
+    if (!aceptar) {
+      document.getElementById('execution-mode').value = modoEjecucion;
+      return;
+    }
+  }
+  modoEjecucion = ['demo', 'real'].includes(modo) ? modo : 'simulacion';
+  if (modoEjecucion === 'real') {
+    Object.keys(mercadosActivos).forEach(id => {
+      autoTrader.toggle(id, false);
+      const checkbox = document.querySelector(`#card-${id} input[type="checkbox"]`);
+      if (checkbox) checkbox.checked = false;
+      actualizarPanelAutomatico(id, { activo: false, estadoForzado: null });
+    });
+  }
   registrarLogAuto(
-    modoEjecucion === 'demo'
-      ? 'Modo cuenta demo real activado. Las próximas ejecuciones enviarán órdenes a Deriv.'
-      : 'Modo simulación segura activado. No se enviarán órdenes a Deriv.',
-    modoEjecucion === 'demo' ? 'error' : 'success'
+    modoEjecucion === 'real'
+      ? 'Cuenta real controlada activada. Automático bloqueado y monto máximo $2.'
+      : modoEjecucion === 'demo'
+        ? 'Modo cuenta demo real activado. Las próximas ejecuciones enviarán órdenes a Deriv demo.'
+        : 'Modo simulación segura activado. No se enviarán órdenes a Deriv.',
+    modoEjecucion === 'real' || modoEjecucion === 'demo' ? 'error' : 'success'
   );
+  actualizarSaldo();
+  cargarPortfolio();
 }
 
 function abrirHistorial() {
@@ -837,8 +865,12 @@ function actualizarStatsBalance() {
 }
 
 async function actualizarSaldo() {
+  const labelSaldo = document.getElementById('balance-label');
+  if (labelSaldo) {
+    labelSaldo.textContent = modoEjecucion === 'real' ? 'Saldo real (Deriv):' : 'Saldo demo (Deriv):';
+  }
   try {
-    const data = await obtenerCuenta();
+    const data = await obtenerCuenta(modoEjecucion === 'real' ? 'real' : 'demo');
     const el = document.getElementById('balance-value');
     if (data.accountId) {
       saldoReal = parseFloat(data.balance);
@@ -969,6 +1001,8 @@ async function reconciliarConDeriv() {
 
 async function cargarPortfolio({ manual = false } = {}) {
   const contenedor = document.getElementById('real-positions');
+  const titulo = document.getElementById('real-positions-title');
+  if (titulo) titulo.textContent = modoEjecucion === 'real' ? 'Cuenta real controlada' : 'Cuenta demo real';
   const boton = document.getElementById('btn-reconcile-deriv');
   if (boton) {
     boton.disabled = true;
@@ -977,7 +1011,7 @@ async function cargarPortfolio({ manual = false } = {}) {
   contenedor.innerHTML = '<div class="positions-empty">Cargando posiciones reales...</div>';
 
   try {
-    const wsUrl = await obtenerWsUrl();
+    const wsUrl = await obtenerWsUrl(modoEjecucion === 'real' ? 'real' : 'demo');
     if (portfolioWs) portfolioWs.close();
     const cierresDetectados = [];
     const pendientesConsultados = new Set();
@@ -1138,13 +1172,15 @@ async function ejecutarOperacion(mercadoId, tipo, entrada, sl, tp, btnId) {
 
   const btn = document.getElementById(btnId);
   if (btn) { btn.disabled = true; btn.textContent = 'Cotizando...'; }
+  const accountMode = modoEjecucion === 'real' ? 'real' : 'demo';
 
   try {
     const resultado = await ejecutarOrdenDemo({
-      mercadoId, tipo, stake, entrada, sl, tp,
+      mercadoId, tipo, stake, entrada, sl, tp, accountMode,
     }, {
-      confirmarCotizacion: cotizacion => confirm(
-        `Confirmar operación REAL en tu cuenta demo:\n\n`
+      confirmarCotizacion: cotizacion => {
+        const detalle =
+        `Confirmar operación en ${etiquetaModoOperacion()}:\n\n`
         + `Mercado: ${nombre}\n`
         + `Tipo: ${tipo}\n`
         + `Inversión: $${stake.toFixed(2)}\n`
@@ -1156,8 +1192,12 @@ async function ejecutarOperacion(mercadoId, tipo, entrada, sl, tp, btnId) {
         + `Entrada: ${entrada.toFixed(2)}\n`
         + `Stop Loss: ${sl.toFixed(2)}\n`
         + `Take Profit: ${tp.toFixed(2)}\n\n`
-        + `¿Ejecutar esta operación ahora?`
-      ),
+        + (modoEjecucion === 'real'
+          ? 'Para enviar dinero real escribe REAL en la siguiente ventana.'
+          : '¿Ejecutar esta operación ahora?');
+        if (modoEjecucion !== 'real') return confirm(detalle);
+        return prompt(detalle) === 'REAL';
+      },
     });
       if (resultado.cancelada) return;
       const { compra, multiplicador, cotizacion } = resultado;
@@ -1166,7 +1206,7 @@ async function ejecutarOperacion(mercadoId, tipo, entrada, sl, tp, btnId) {
         mercadoId,
         nombre,
         tipo,
-        modo: 'demo',
+        modo: accountMode,
         origen: 'manual',
         stake,
         entrada,
@@ -1176,7 +1216,7 @@ async function ejecutarOperacion(mercadoId, tipo, entrada, sl, tp, btnId) {
         stopLossAmount: objetivos.riesgo,
         takeProfitAmount: objetivos.objetivo,
       });
-      alert(`✅ Operación ejecutada\n\nContrato: ${compra.contract_id}\nPrecio compra: $${compra.buy_price}\nMultiplicador: x${multiplicador}\nSaldo restante: $${compra.balance_after}`);
+      alert(`✅ Operación ejecutada en ${etiquetaModoOperacion()}\n\nContrato: ${compra.contract_id}\nPrecio compra: $${compra.buy_price}\nMultiplicador: x${multiplicador}\nSaldo restante: $${compra.balance_after}`);
       actualizarSaldo();
       cargarPortfolio();
       return true;
@@ -1184,11 +1224,14 @@ async function ejecutarOperacion(mercadoId, tipo, entrada, sl, tp, btnId) {
     alert(`❌ Error: ${error.message}`);
     return false;
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = 'Ejecutar en demo'; }
+    if (btn) { btn.disabled = false; btn.textContent = modoEjecucion === 'real' ? 'Ejecutar real controlado' : 'Ejecutar en demo'; }
   }
 }
 
 async function ejecutarOperacionAutomaticaCore(mercadoId, tipo, entrada, sl, tp) {
+  if (modoEjecucion === 'real') {
+    throw new Error('El automático está bloqueado en Cuenta real controlada.');
+  }
   const stake = calcularInversionSugerida();
   const objetivos = calcularObjetivosMonetarios(stake);
   const nombre = NOMBRES_SIMBOLOS[mercadoId] || mercadoId;
@@ -1241,6 +1284,13 @@ const autoTrader = createAutoTrader({
 });
 
 function toggleAutoMercado(id, activo) {
+  if (modoEjecucion === 'real' && activo) {
+    alert('El automático está bloqueado en Cuenta real controlada. Usa solo operaciones manuales.');
+    const checkbox = document.querySelector(`#card-${id} input[type="checkbox"]`);
+    if (checkbox) checkbox.checked = false;
+    actualizarPanelAutomatico(id, { activo: false, estadoForzado: null });
+    return;
+  }
   autoTrader.toggle(id, activo);
   actualizarPanelAutomatico(id, {
     activo,
@@ -1253,11 +1303,22 @@ function ejecutarOperacionAuto(...args) {
 }
 
 function calcularInversionSugerida() {
-  return riskManager.calcularInversion();
+  const inversion = riskManager.calcularInversion();
+  return modoEjecucion === 'real'
+    ? Math.min(inversion, REAL_CONTROLADO_MAX_STAKE)
+    : inversion;
 }
 
 function etiquetaInversion() {
-  return riskManager.etiqueta();
+  return modoEjecucion === 'real'
+    ? `Real controlado máx. $${REAL_CONTROLADO_MAX_STAKE}`
+    : riskManager.etiqueta();
+}
+
+function etiquetaModoOperacion() {
+  if (modoEjecucion === 'real') return 'Cuenta real controlada';
+  if (modoEjecucion === 'demo') return 'Cuenta demo real';
+  return 'Simulación segura';
 }
 
 function registrarSenal(mercadoId, nombre, tipo, hora, entrada, sl, tp) {
@@ -1346,7 +1407,11 @@ function renderPlan(entrada, sl, tp, tipo, mercadoId, calidad) {
   const { riesgo: riesgoMonetario, objetivo: objetivoMonetario } = calcularObjetivosMonetarios(inversion);
   const btnId = `exec-${mercadoId}`;
   const btnClass = tipo === 'SELL' ? 'btn-execute sell' : 'btn-execute';
-  const accionTexto = modoEjecucion === 'simulacion' ? 'Abrir simulación' : 'Ejecutar en demo';
+  const accionTexto = modoEjecucion === 'simulacion'
+    ? 'Abrir simulación'
+    : modoEjecucion === 'real'
+      ? 'Ejecutar real controlado'
+      : 'Ejecutar en demo';
   const autoBadge = autoTrader.estaActivo(mercadoId) ? '<span style="font-size:10px;padding:2px 6px;border-radius:4px;font-weight:500;background:rgba(41,98,255,0.15);color:#2962ff;margin-left:6px">🤖 AUTO</span>' : '';
   return `
     <div class="trade-plan">

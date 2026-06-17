@@ -243,7 +243,7 @@ table.history-table tr:last-child td { border-bottom: none; }
   <h1>📊 CBM Trading</h1>
   <div class="header-right">
     <div class="balance-info">
-      <span>Saldo demo (Deriv):</span>
+      <span id="balance-label">Saldo demo (Deriv):</span>
       <span class="balance-value" id="balance-value">Cargando...</span>
     </div>
     <div class="status">
@@ -365,6 +365,7 @@ table.history-table tr:last-child td { border-bottom: none; }
       <select id="execution-mode" onchange="cambiarModoEjecucion(this.value)">
         <option value="simulacion" selected>Simulación segura</option>
         <option value="demo">Cuenta demo real</option>
+        <option value="real">Cuenta real controlada</option>
       </select>
     </div>
 
@@ -377,7 +378,7 @@ table.history-table tr:last-child td { border-bottom: none; }
     <button class="btn-clear" onclick="limpiarHistorial()">🗑️ Limpiar</button>
   </div>
 
-  <div class="risk-note">El modo <b>Simulación segura</b> no envía compras a Deriv. Para operar el saldo demo real debes seleccionarlo explícitamente.</div>
+  <div class="risk-note">El modo <b>Simulación segura</b> no envía compras a Deriv. <b>Cuenta real controlada</b> usa dinero real, bloquea automático y limita cada operación a $2.</div>
   <div class="storage-note">💾 El historial de señales se guarda automáticamente en este navegador y persiste al recargar la página.</div>
 </div>
 
@@ -447,7 +448,7 @@ table.history-table tr:last-child td { border-bottom: none; }
     </div>
     <div class="positions-grid" id="positions-grid">
       <div class="positions-group">
-        <div class="positions-group-title">Cuenta demo real</div>
+        <div class="positions-group-title" id="real-positions-title">Cuenta demo real</div>
         <div id="real-positions"><div class="positions-empty">Abre esta ventana para consultar las posiciones.</div></div>
       </div>
       <div class="positions-group" id="simulated-positions-group" style="display:none">

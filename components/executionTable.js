@@ -9,6 +9,12 @@ function dinero(value, signo = false) {
   return `${prefijo}$${Math.abs(numero).toFixed(2)}`;
 }
 
+function modoTexto(modo) {
+  if (modo === 'simulacion') return 'Simulación';
+  if (modo === 'real') return 'Real controlado';
+  return 'Demo real';
+}
+
 export function renderExecutionTable({ registros, tbody, empty, summary }) {
   const ganadas = registros.filter(item => item.estado === 'ganada').length;
   const perdidas = registros.filter(item => item.estado === 'perdida').length;
@@ -40,7 +46,7 @@ export function renderExecutionTable({ registros, tbody, empty, summary }) {
         <td>${hora(item.abiertaEn)}</td>
         <td>${item.nombre}</td>
         <td><span class="tag ${item.tipo === 'BUY' ? 'tag-buy' : 'tag-sell'}">${item.tipo}</span></td>
-        <td>${item.modo === 'simulacion' ? 'Simulación' : 'Demo real'}</td>
+        <td>${modoTexto(item.modo)}</td>
         <td>${item.origen === 'automatica' ? 'Automática' : 'Manual'}</td>
         <td>$${Number(item.stake).toFixed(2)}</td>
         <td>${item.multiplicador ? `x${item.multiplicador}` : '—'}</td>

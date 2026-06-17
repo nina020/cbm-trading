@@ -9,11 +9,19 @@ services:
     envVars:
       - key: NODE_VERSION
         value: 22
-      - key: DERIV_TOKEN
-        sync: false
       - key: DERIV_APP_ID
         sync: false
+      - key: DERIV_TOKEN
+        sync: false
       - key: DERIV_ACCOUNT_ID
+        sync: false
+      - key: DERIV_DEMO_TOKEN
+        sync: false
+      - key: DERIV_DEMO_ACCOUNT_ID
+        sync: false
+      - key: DERIV_REAL_TOKEN
+        sync: false
+      - key: DERIV_REAL_ACCOUNT_ID
         sync: false
       - key: APP_USERNAME
         sync: false
