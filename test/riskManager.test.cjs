@@ -689,6 +689,21 @@ test('el registro conserva los límites monetarios de la operación', async () =
   assert.equal(journal.obtener('123').takeProfitAmount, 27);
 });
 
+test('el servicio WebSocket puede consultar el estado de un contrato Deriv', async () => {
+  const { solicitarContratoEstado } = await cargarModulo(
+    path.join(__dirname, '../services/websocketService.js'),
+  );
+  let enviado = null;
+  solicitarContratoEstado({
+    send: mensaje => { enviado = JSON.parse(mensaje); },
+  }, 12345);
+
+  assert.deepEqual(enviado, {
+    proposal_open_contract: 1,
+    contract_id: 12345,
+  });
+});
+
 test('el ranking prioriza un mercado estable con mejor señal e historial', async () => {
   const { ordenarMercadosParaInicio } = await cargarModulo(
     path.join(__dirname, '../trading/marketRanking.js'),

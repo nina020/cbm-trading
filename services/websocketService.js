@@ -25,6 +25,10 @@ export function suscribirContrato(ws, contractId) {
   ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: contractId, subscribe: 1 }));
 }
 
+export function solicitarContratoEstado(ws, contractId) {
+  ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: contractId }));
+}
+
 export function cerrarContrato(ws, contractId) {
   ws.send(JSON.stringify({ sell: contractId, price: 0 }));
 }

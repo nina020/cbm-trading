@@ -10,7 +10,7 @@ import { obtenerTicksHistoricos } from './services/historicalDataService.js';
 import { iniciarSincronizacionCloud } from './services/cloudStateService.js';
 import {
   crearWebSocket, suscribirTicks, solicitarPortfolio, suscribirContrato,
-  cerrarContrato,
+  solicitarContratoEstado, cerrarContrato,
 } from './services/websocketService.js';
 import {
   createRiskManager, calcularObjetivosMonetarios, evaluarSalidaPorPrecio,
@@ -870,17 +870,52 @@ function actualizarTarjetaPosicion(c) {
   }
 }
 
-async function cargarPortfolio() {
+function idsDemoPendientesNoAbiertos() {
+  const abiertos = new Set(contratosRealesAbiertos.map(id => String(id)));
+  return executionJournal.registros
+    .filter(item => item.modo === 'demo' && item.estado === 'pendiente')
+    .map(item => String(item.id))
+    .filter(id => !abiertos.has(id));
+}
+
+function notificarReconciliacion(cerradas) {
+  if (!cerradas.length) return;
+  const ganadas = cerradas.filter(item => item.pnl >= 0).length;
+  const perdidas = cerradas.length - ganadas;
+  const mensaje = `Reconciliación Deriv: ${cerradas.length} cierre(s) detectado(s), ${ganadas} ganada(s), ${perdidas} perdida(s).`;
+  registrarLogAuto(mensaje, perdidas ? 'error' : 'success');
+
+  if ('Notification' in window && Notification.permission === 'granted') {
+    new Notification('CBM Trading: cierres actualizados', { body: mensaje });
+  }
+}
+
+async function reconciliarConDeriv() {
+  await cargarPortfolio({ manual: true });
+}
+
+async function cargarPortfolio({ manual = false } = {}) {
   const contenedor = document.getElementById('real-positions');
+  const boton = document.getElementById('btn-reconcile-deriv');
+  if (boton) {
+    boton.disabled = true;
+    boton.textContent = manual ? 'Reconciliando...' : 'Actualizando...';
+  }
   contenedor.innerHTML = '<div class="positions-empty">Cargando posiciones reales...</div>';
 
   try {
     const wsUrl = await obtenerWsUrl();
     if (portfolioWs) portfolioWs.close();
+    const cierresDetectados = [];
+    const pendientesConsultados = new Set();
     portfolioWs = crearWebSocket(wsUrl, {
       onOpen: ws => solicitarPortfolio(ws),
       onMessage: msg => {
       if (msg.error) {
+        if (pendientesConsultados.has(String(msg.echo_req?.contract_id))) {
+          pendientesConsultados.delete(String(msg.echo_req.contract_id));
+          return;
+        }
         contenedor.innerHTML = `<div class="positions-empty">Error: ${msg.error.message}</div>`;
         return;
       }
@@ -890,23 +925,43 @@ async function cargarPortfolio() {
         contratosRealesAbiertos = contratos.map(c => c.contract_id);
         renderResumenEjecuciones(executionJournal.registros);
         renderEstadoRiesgoGlobal();
+        const pendientes = idsDemoPendientesNoAbiertos();
         if (contratos.length === 0) {
           contenedor.innerHTML = '<div class="positions-empty">No hay posiciones reales abiertas.</div>';
-          return;
+        } else {
+          contenedor.innerHTML = '';
+          contratos.forEach(c => {
+            crearTarjetaPosicion(c);
+            suscribirContrato(portfolioWs, c.contract_id);
+          });
         }
-        contenedor.innerHTML = '';
-        contratos.forEach(c => {
-          crearTarjetaPosicion(c);
-          suscribirContrato(portfolioWs, c.contract_id);
+        pendientes.forEach(id => {
+          pendientesConsultados.add(String(id));
+          solicitarContratoEstado(portfolioWs, id);
         });
+        if (manual && !pendientes.length) {
+          registrarLogAuto('Reconciliación Deriv completa: no hay cierres pendientes por actualizar.', 'success');
+        }
       }
 
       if (msg.proposal_open_contract) {
+        const contrato = msg.proposal_open_contract;
+        if (contrato.is_sold) {
+          const pnl = Number(contrato.profit) || 0;
+          cierresDetectados.push({ id: contrato.contract_id, pnl });
+        }
+        pendientesConsultados.delete(String(contrato.contract_id));
         actualizarTarjetaPosicion(msg.proposal_open_contract);
+        if (manual && pendientesConsultados.size === 0) {
+          notificarReconciliacion(cierresDetectados);
+          if (!cierresDetectados.length) {
+            registrarLogAuto('Reconciliación Deriv completa: posiciones y métricas actualizadas.', 'success');
+          }
+        }
       }
 
       if (msg.sell) {
-        cargarPortfolio();
+        cargarPortfolio({ manual: false });
         actualizarSaldo();
       }
       },
@@ -916,6 +971,11 @@ async function cargarPortfolio() {
     });
   } catch (error) {
     contenedor.innerHTML = `<div class="positions-empty">Error: ${error.message}</div>`;
+  } finally {
+    if (boton) {
+      boton.disabled = false;
+      boton.textContent = 'Reconciliar con Deriv';
+    }
   }
 }
 
@@ -1555,6 +1615,7 @@ Object.assign(window, {
   cerrarPosicionesClick,
   verGraficoPosicion,
   cerrarGraficoPosicion,
+  reconciliarConDeriv,
   ejecutarBacktestActual,
   aplicarCalibracionBacktest,
   abrirHistorial,
