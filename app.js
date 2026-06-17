@@ -90,16 +90,21 @@ function renderRegistroEjecuciones(registros) {
 }
 
 function renderResumenEjecuciones(registros = []) {
-  const ganadas = registros.filter(item => item.estado === 'ganada').length;
-  const perdidas = registros.filter(item => item.estado === 'perdida').length;
+  const idsAbiertosDeriv = new Set(contratosRealesAbiertos.map(id => String(id)));
+  const registrosDemo = registros.filter(item => item.modo === 'demo');
+  const registrosVigentes = registrosDemo.filter(item => (
+    item.estado !== 'pendiente' || idsAbiertosDeriv.has(String(item.id))
+  ));
+  const ganadas = registrosVigentes.filter(item => item.estado === 'ganada').length;
+  const perdidas = registrosVigentes.filter(item => item.estado === 'perdida').length;
   const resueltas = ganadas + perdidas;
   const winrate = resueltas > 0 ? `${((ganadas / resueltas) * 100).toFixed(1)}%` : '—';
-  const perdidaAcumulada = registros.reduce((totalPerdido, item) => {
+  const perdidaAcumulada = registrosVigentes.reduce((totalPerdido, item) => {
     const pnl = Number(item.pnlNeto ?? item.pnl);
     return Number.isFinite(pnl) && pnl < 0 ? totalPerdido + Math.abs(pnl) : totalPerdido;
   }, 0);
 
-  document.getElementById('hist-total').textContent = registros.length;
+  document.getElementById('hist-total').textContent = registrosVigentes.length;
   document.getElementById('hist-ganadas').textContent = ganadas;
   document.getElementById('hist-perdidas').textContent = perdidas;
   document.getElementById('hist-winrate').textContent = winrate;
@@ -825,6 +830,7 @@ function actualizarTarjetaPosicion(c) {
       costos,
       pnlBruto: costos === null ? null : Number(c.profit) + costos,
     });
+    renderResumenEjecuciones(executionJournal.registros);
   }
   if (!el) return;
 
@@ -882,6 +888,7 @@ async function cargarPortfolio() {
       if (msg.portfolio) {
         const contratos = msg.portfolio.contracts || [];
         contratosRealesAbiertos = contratos.map(c => c.contract_id);
+        renderResumenEjecuciones(executionJournal.registros);
         renderEstadoRiesgoGlobal();
         if (contratos.length === 0) {
           contenedor.innerHTML = '<div class="positions-empty">No hay posiciones reales abiertas.</div>';
