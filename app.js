@@ -53,7 +53,7 @@ const REAL_CONTROLADO_MAX_STAKE = 2;
 let saldoReal = 10000;
 let saldoRealInicial = null;
 let portfolioWs = null;
-let contratosRealesAbiertos = [];
+const contratosDerivAbiertosPorCuenta = { demo: [], real: [] };
 let positionChart = null;
 let cooldownAutoSeg = 60;
 let signalConfig = { ...SIGNAL_CONFIG_DEFAULTS };
@@ -92,7 +92,7 @@ function renderRegistroEjecuciones(registros) {
 }
 
 function renderResumenEjecuciones(registros = []) {
-  const idsAbiertosDeriv = new Set(contratosRealesAbiertos.map(id => String(id)));
+  const idsAbiertosDeriv = new Set(contratosDerivAbiertosPorCuenta.demo.map(id => String(id)));
   const registrosDemo = registros.filter(item => item.modo === 'demo');
   const registrosVigentes = registrosDemo.filter(item => (
     item.estado !== 'pendiente' || idsAbiertosDeriv.has(String(item.id))
@@ -239,12 +239,13 @@ function reanudarOperativa() {
 }
 
 function obtenerRegistrosParaRiesgo() {
+  const cuentaActual = modoEjecucion === 'real' ? 'real' : 'demo';
   const idsRegistrados = new Set(
     executionJournal.registros
       .filter(item => item.estado === 'pendiente')
       .map(item => String(item.id)),
   );
-  const posicionesExternas = contratosRealesAbiertos
+  const posicionesExternas = (contratosDerivAbiertosPorCuenta[cuentaActual] || [])
     .filter(id => !idsRegistrados.has(String(id)))
     .map(id => ({ id, estado: 'pendiente' }));
   return [...executionJournal.registros, ...posicionesExternas];
@@ -926,7 +927,8 @@ function crearTarjetaPosicion(contrato) {
 function actualizarTarjetaPosicion(c) {
   const el = document.getElementById(`pos-${c.contract_id}`);
   if (c.is_sold) {
-    contratosRealesAbiertos = contratosRealesAbiertos.filter(
+    const cuentaActual = modoEjecucion === 'real' ? 'real' : 'demo';
+    contratosDerivAbiertosPorCuenta[cuentaActual] = contratosDerivAbiertosPorCuenta[cuentaActual].filter(
       id => String(id) !== String(c.contract_id),
     );
     const costos = extraerCostosReportados(c);
@@ -967,7 +969,8 @@ function actualizarTarjetaPosicion(c) {
     el.remove();
     const contenedor = document.getElementById('real-positions');
     if (!contenedor.querySelector('.position-card')) {
-      contenedor.innerHTML = '<div class="positions-empty">No hay posiciones reales abiertas.</div>';
+      const etiquetaCuenta = modoEjecucion === 'real' ? 'cuenta real controlada' : 'cuenta demo real';
+      contenedor.innerHTML = `<div class="positions-empty">No hay posiciones abiertas en ${etiquetaCuenta}.</div>`;
     }
     actualizarSaldo();
   } else {
@@ -975,10 +978,10 @@ function actualizarTarjetaPosicion(c) {
   }
 }
 
-function idsDemoPendientesNoAbiertos() {
-  const abiertos = new Set(contratosRealesAbiertos.map(id => String(id)));
+function idsPendientesNoAbiertosPorCuenta(cuenta) {
+  const abiertos = new Set((contratosDerivAbiertosPorCuenta[cuenta] || []).map(id => String(id)));
   return executionJournal.registros
-    .filter(item => item.modo === 'demo' && item.estado === 'pendiente')
+    .filter(item => item.modo === cuenta && item.estado === 'pendiente')
     .map(item => String(item.id))
     .filter(id => !abiertos.has(id));
 }
@@ -1002,16 +1005,18 @@ async function reconciliarConDeriv() {
 async function cargarPortfolio({ manual = false } = {}) {
   const contenedor = document.getElementById('real-positions');
   const titulo = document.getElementById('real-positions-title');
-  if (titulo) titulo.textContent = modoEjecucion === 'real' ? 'Cuenta real controlada' : 'Cuenta demo real';
+  const cuentaActual = modoEjecucion === 'real' ? 'real' : 'demo';
+  const etiquetaCuenta = cuentaActual === 'real' ? 'Cuenta real controlada' : 'Cuenta demo real';
+  if (titulo) titulo.textContent = etiquetaCuenta;
   const boton = document.getElementById('btn-reconcile-deriv');
   if (boton) {
     boton.disabled = true;
     boton.textContent = manual ? 'Reconciliando...' : 'Actualizando...';
   }
-  contenedor.innerHTML = '<div class="positions-empty">Cargando posiciones reales...</div>';
+  contenedor.innerHTML = `<div class="positions-empty">Cargando posiciones de ${etiquetaCuenta.toLowerCase()}...</div>`;
 
   try {
-    const wsUrl = await obtenerWsUrl(modoEjecucion === 'real' ? 'real' : 'demo');
+    const wsUrl = await obtenerWsUrl(cuentaActual);
     if (portfolioWs) portfolioWs.close();
     const cierresDetectados = [];
     const pendientesConsultados = new Set();
@@ -1029,12 +1034,12 @@ async function cargarPortfolio({ manual = false } = {}) {
 
       if (msg.portfolio) {
         const contratos = msg.portfolio.contracts || [];
-        contratosRealesAbiertos = contratos.map(c => c.contract_id);
+        contratosDerivAbiertosPorCuenta[cuentaActual] = contratos.map(c => c.contract_id);
         renderResumenEjecuciones(executionJournal.registros);
         renderEstadoRiesgoGlobal();
-        const pendientes = idsDemoPendientesNoAbiertos();
+        const pendientes = idsPendientesNoAbiertosPorCuenta(cuentaActual);
         if (contratos.length === 0) {
-          contenedor.innerHTML = '<div class="positions-empty">No hay posiciones reales abiertas.</div>';
+          contenedor.innerHTML = `<div class="positions-empty">No hay posiciones abiertas en ${etiquetaCuenta.toLowerCase()}.</div>`;
         } else {
           contenedor.innerHTML = '';
           contratos.forEach(c => {
@@ -1077,7 +1082,7 @@ async function cargarPortfolio({ manual = false } = {}) {
       },
     });
   } catch (error) {
-    contenedor.innerHTML = `<div class="positions-empty">Error: ${error.message}</div>`;
+    contenedor.innerHTML = `<div class="positions-empty">Error en ${etiquetaCuenta}: ${error.message}</div>`;
   } finally {
     if (boton) {
       boton.disabled = false;
