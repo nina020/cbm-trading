@@ -74,9 +74,38 @@ function obtenerCredencialesDeriv(modo = 'demo') {
   const real = modo === 'real';
   return {
     token: real ? REAL_TOKEN : DEMO_TOKEN,
-    accountId: real ? REAL_ACCOUNT_ID : DEMO_ACCOUNT_ID,
+    accountId: normalizarAccountId(real ? REAL_ACCOUNT_ID : DEMO_ACCOUNT_ID),
     modo: real ? 'real' : 'demo',
   };
+}
+
+function normalizarAccountId(accountId) {
+  return String(accountId || '').trim().toUpperCase();
+}
+
+function accountTypeMatches(account, modo) {
+  const type = String(account.account_type || '').toLowerCase();
+  const id = normalizarAccountId(account.account_id);
+  if (modo === 'real') return type === 'real' || id.startsWith('CR');
+  return type === 'demo' || type === 'virtual' || id.startsWith('VRTC');
+}
+
+async function resolverCuentaDeriv(credenciales) {
+  const data = await derivFetch('https://api.derivws.com/trading/v1/options/accounts', {
+    token: credenciales.token,
+  });
+  const accounts = Array.isArray(data.data) ? data.data : [];
+  const account = accounts.find(item => (
+    normalizarAccountId(item.account_id) === credenciales.accountId
+  )) || accounts.find(item => accountTypeMatches(item, credenciales.modo));
+
+  if (!account) {
+    const error = new Error(`No se encontró una cuenta ${credenciales.modo} disponible para este token`);
+    error.statusCode = 404;
+    throw error;
+  }
+
+  return account;
 }
 
 async function derivFetch(url, options = {}) {
@@ -150,17 +179,7 @@ async function handleApi(req, res) {
       sendJson(res, 500, { error: `Falta DERIV_${cuentaSolicitada.toUpperCase()}_ACCOUNT_ID en las variables de entorno` });
       return;
     }
-    const data = await derivFetch('https://api.derivws.com/trading/v1/options/accounts', {
-      token: credenciales.token,
-    });
-    const accounts = Array.isArray(data.data) ? data.data : [];
-    const account = accounts.find(item => item.account_id === credenciales.accountId)
-      || accounts.find(item => item.account_type === cuentaSolicitada);
-
-    if (!account) {
-      sendJson(res, 404, { error: `No se encontró una cuenta ${cuentaSolicitada}` });
-      return;
-    }
+    const account = await resolverCuentaDeriv(credenciales);
 
     sendJson(res, 200, {
       accountId: account.account_id,
@@ -178,8 +197,9 @@ async function handleApi(req, res) {
       sendJson(res, 500, { error: `Falta DERIV_${cuentaSolicitada.toUpperCase()}_ACCOUNT_ID en las variables de entorno` });
       return;
     }
+    const account = await resolverCuentaDeriv(credenciales);
     const data = await derivFetch(
-      `https://api.derivws.com/trading/v1/options/accounts/${credenciales.accountId}/otp`,
+      `https://api.derivws.com/trading/v1/options/accounts/${account.account_id}/otp`,
       { method: 'POST', token: credenciales.token },
     );
 
