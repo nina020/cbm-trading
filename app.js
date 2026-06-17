@@ -79,6 +79,7 @@ await iniciarSincronizacionCloud([
 ]);
 
 function renderRegistroEjecuciones(registros) {
+  renderResumenEjecuciones(registros);
   renderExecutionTable({
     registros,
     tbody: document.getElementById('execution-body'),
@@ -86,6 +87,24 @@ function renderRegistroEjecuciones(registros) {
   });
   renderRankingMercados();
   renderEstadoRiesgoGlobal();
+}
+
+function renderResumenEjecuciones(registros = []) {
+  const ganadas = registros.filter(item => item.estado === 'ganada').length;
+  const perdidas = registros.filter(item => item.estado === 'perdida').length;
+  const resueltas = ganadas + perdidas;
+  const winrate = resueltas > 0 ? `${((ganadas / resueltas) * 100).toFixed(1)}%` : '—';
+  const perdidaAcumulada = registros.reduce((totalPerdido, item) => {
+    const pnl = Number(item.pnlNeto ?? item.pnl);
+    return Number.isFinite(pnl) && pnl < 0 ? totalPerdido + Math.abs(pnl) : totalPerdido;
+  }, 0);
+
+  document.getElementById('hist-total').textContent = registros.length;
+  document.getElementById('hist-ganadas').textContent = ganadas;
+  document.getElementById('hist-perdidas').textContent = perdidas;
+  document.getElementById('hist-winrate').textContent = winrate;
+  document.getElementById('hist-loss-amount').textContent =
+    `$${perdidaAcumulada.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function renderRankingMercados() {
@@ -1174,23 +1193,6 @@ function renderHistorial() {
     }).join('');
   }
 
-  const total = historial.length;
-  const ganadas = historial.filter(h => h.estado === 'ganada').length;
-  const perdidas = historial.filter(h => h.estado === 'perdida').length;
-  const resueltas = ganadas + perdidas;
-  const winrate = resueltas > 0 ? ((ganadas / resueltas) * 100).toFixed(1) + '%' : '—';
-  const perdidaAcumulada = historial.reduce((totalPerdido, h) => {
-    const pnl = Number(h.pnl);
-    return Number.isFinite(pnl) && pnl < 0 ? totalPerdido + Math.abs(pnl) : totalPerdido;
-  }, 0);
-
-  document.getElementById('hist-total').textContent = total;
-  document.getElementById('hist-ganadas').textContent = ganadas;
-  document.getElementById('hist-perdidas').textContent = perdidas;
-  document.getElementById('hist-winrate').textContent = winrate;
-  document.getElementById('hist-loss-amount').textContent =
-    `$${perdidaAcumulada.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
   guardarHistorial();
 }
 
@@ -1503,6 +1505,7 @@ globalRiskManager.cargar();
 cargarSignalConfig();
 cargarStrategyConfig();
 cargarHistorialGuardado();
+renderResumenEjecuciones([]);
 executionJournal.cargar();
 simulationEngine.cargar();
 actualizarSaldo();
