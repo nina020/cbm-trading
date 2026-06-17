@@ -1051,3 +1051,33 @@ test('las reglas de estrategia limitan la frecuencia automática por hora y día
   assert.equal(resultado.codigo, 'frequency');
   assert.equal(resultado.conteo.hora, 2);
 });
+
+test('la evaluación semanal resume solo operaciones demo recientes', async () => {
+  const { evaluarSemanaTrading, evaluarPreparacionReal } = await cargarModulo(
+    path.join(__dirname, '../trading/weeklyEvaluation.js'),
+  );
+  const now = new Date('2026-06-16T12:00:00Z');
+  const registros = [
+    { modo: 'demo', estado: 'ganada', pnlNeto: 6, nombre: 'Vol 10', cerradaEn: '2026-06-16T10:00:00Z' },
+    { modo: 'demo', estado: 'perdida', pnlNeto: -4, nombre: 'Vol 10', cerradaEn: '2026-06-15T10:00:00Z' },
+    { modo: 'simulacion', estado: 'ganada', pnlNeto: 100, nombre: 'Sim', cerradaEn: '2026-06-16T10:00:00Z' },
+    { modo: 'demo', estado: 'ganada', pnlNeto: 10, nombre: 'Vieja', cerradaEn: '2026-05-01T10:00:00Z' },
+    { modo: 'demo', estado: 'pendiente', pnlNeto: null, nombre: 'Abierta', abiertaEn: '2026-06-16T11:00:00Z' },
+  ];
+
+  const evaluacion = evaluarSemanaTrading({ registros, now });
+  const preparacion = evaluarPreparacionReal({
+    evaluacion,
+    registros,
+    configRiesgo: { perdidaMaximaDiaria: 50 },
+  });
+
+  assert.equal(evaluacion.total, 2);
+  assert.equal(evaluacion.ganadas, 1);
+  assert.equal(evaluacion.perdidas, 1);
+  assert.equal(evaluacion.pnl, 2);
+  assert.equal(evaluacion.perdidaAcumulada, 4);
+  assert.equal(evaluacion.mejorMercado.key, 'Vol 10');
+  assert.equal(preparacion.listo, false);
+  assert.equal(preparacion.checks.find(item => item.id === 'riesgo').ok, true);
+});

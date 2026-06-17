@@ -201,6 +201,13 @@ body { background: var(--bg-page); color: var(--text-primary); transition: backg
 .opportunity-item small { display: block; color: var(--text-faint); font-size: 10px; }
 .opportunity-item b { display: block; margin-top: 4px; color: var(--text-primary); font-size: 15px; }
 .opportunity-warning { padding: 10px 12px; border-radius: 8px; border: 1px solid rgba(255,176,32,.4); background: rgba(255,176,32,.1); color: var(--text-secondary); font-size: 12px; line-height: 1.35; }
+.readiness-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; margin-top: 12px; }
+.readiness-check { display: flex; gap: 8px; align-items: flex-start; padding: 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-stat); font-size: 12px; }
+.readiness-check span { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; }
+.readiness-check b { display: block; color: var(--text-primary); }
+.readiness-check small { display: block; margin-top: 3px; color: var(--text-faint); }
+.readiness-ok span { background: rgba(38,166,154,.15); color: #26a69a; }
+.readiness-pending span { background: rgba(255,176,32,.15); color: #d68000; }
 .btn-execute { width: 100%; margin-top: 8px; background: #2962ff; color: #fff; border: none; border-radius: 6px; padding: 9px; font-size: 12px; font-weight: 600; cursor: pointer; }
 .btn-execute:hover { background: #1e4fd6; }
 .btn-execute:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -247,6 +254,7 @@ table.history-table tr:last-child td { border-bottom: none; }
       <button class="theme-toggle" id="menu-toggle" onclick="toggleMenu()">Menú ▾</button>
       <div class="menu-dropdown" id="menu-dropdown">
         <button class="menu-item" onclick="abrirBacktesting()">Backtesting histórico</button>
+        <button class="menu-item" onclick="abrirEvaluacionSemanal()">Evaluación semanal</button>
         <button class="menu-item" onclick="abrirConfiguracionSenales()">Calidad de señales</button>
         <button class="menu-item" onclick="abrirConfiguracionRiesgo()">Límites globales de riesgo</button>
       </div>
@@ -529,6 +537,24 @@ table.history-table tr:last-child td { border-bottom: none; }
       <button class="modal-close" onclick="cerrarOportunidadFueraHorario()">Descartar</button>
       <button class="btn-add" id="offhours-action" onclick="invertirOportunidadFueraHorario()">Invertir ahora</button>
     </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="weekly-evaluation-modal" onclick="cerrarEvaluacionSemanalClick(event)">
+  <div class="modal-content" style="max-width:900px">
+    <div class="modal-header">
+      <h2>Evaluación semanal y preparación para real</h2>
+      <button class="modal-close" onclick="cerrarEvaluacionSemanal()">✕ Cerrar</button>
+    </div>
+    <div class="risk-note" style="margin-bottom:12px">
+      Basado solo en operaciones demo cerradas durante los últimos 7 días. No garantiza resultados futuros ni recomienda operar con dinero real.
+    </div>
+    <div class="backtest-metrics" id="weekly-summary"></div>
+    <div class="backtest-section-title">Lecturas clave</div>
+    <div class="opportunity-grid" id="weekly-highlights"></div>
+    <div class="backtest-section-title">Checklist antes de dinero real</div>
+    <div id="real-readiness-status"></div>
+    <div class="readiness-list" id="real-readiness-checks"></div>
   </div>
 </div>
 

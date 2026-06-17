@@ -29,6 +29,7 @@ import {
 import { createMarketCalibrationStore } from './trading/marketCalibration.js';
 import { ejecutarComparativaBacktest } from './trading/backtestEngine.js';
 import { createGlobalRiskManager } from './trading/globalRiskManager.js';
+import { evaluarPreparacionReal, evaluarSemanaTrading } from './trading/weeklyEvaluation.js';
 import { createMarketCard } from './components/marketCard.js';
 import {
   createRealPositionCard, createSimulatedPositionCard, resolverLimitesMonetarios,
@@ -552,6 +553,78 @@ function cerrarBacktesting() {
 
 function cerrarBacktestingClick(event) {
   if (event.target.id === 'backtest-modal') cerrarBacktesting();
+}
+
+function dinero(value, signo = false) {
+  const n = Number(value) || 0;
+  const prefijo = signo && n >= 0 ? '+' : n < 0 ? '-' : '';
+  return `${prefijo}$${Math.abs(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function renderItemEvaluacion(label, item, empty = 'Sin datos') {
+  if (!item) {
+    return `<div class="opportunity-item"><small>${label}</small><b>${empty}</b></div>`;
+  }
+  return `
+    <div class="opportunity-item">
+      <small>${label}</small>
+      <b>${item.key}</b>
+      <div class="market-ranking-note" style="margin:4px 0 0">${item.total} ops · ${item.winRate.toFixed(1)}% · ${dinero(item.pnl, true)}</div>
+    </div>
+  `;
+}
+
+function abrirEvaluacionSemanal() {
+  document.getElementById('menu-dropdown').classList.remove('open');
+  const evaluacion = evaluarSemanaTrading({
+    registros: executionJournal.registros,
+    now: new Date(),
+    dias: 7,
+  });
+  const estadoRiesgo = globalRiskManager.estado(obtenerRegistrosParaRiesgo());
+  const preparacion = evaluarPreparacionReal({
+    evaluacion,
+    registros: executionJournal.registros,
+    configRiesgo: estadoRiesgo.config,
+  });
+
+  document.getElementById('weekly-summary').innerHTML = `
+    <div class="summary-stat"><div class="summary-stat-label">Operaciones 7 días</div><div class="summary-stat-value">${evaluacion.total}</div></div>
+    <div class="summary-stat"><div class="summary-stat-label">Win rate</div><div class="summary-stat-value">${evaluacion.total ? `${evaluacion.winRate.toFixed(1)}%` : '—'}</div></div>
+    <div class="summary-stat"><div class="summary-stat-label">P&L neto</div><div class="summary-stat-value" style="color:${evaluacion.pnl >= 0 ? '#26a69a' : '#ef5350'}">${dinero(evaluacion.pnl, true)}</div></div>
+    <div class="summary-stat"><div class="summary-stat-label">Pérdida acumulada</div><div class="summary-stat-value" style="color:#ef5350">${dinero(evaluacion.perdidaAcumulada)}</div></div>
+    <div class="summary-stat"><div class="summary-stat-label">Drawdown máx.</div><div class="summary-stat-value" style="color:#ef5350">${dinero(evaluacion.maxDrawdown)}</div></div>
+    <div class="summary-stat"><div class="summary-stat-label">Peor racha</div><div class="summary-stat-value">${evaluacion.peorRacha}</div></div>
+  `;
+
+  document.getElementById('weekly-highlights').innerHTML = `
+    ${renderItemEvaluacion('Mejor mercado', evaluacion.mejorMercado)}
+    ${renderItemEvaluacion('Peor mercado', evaluacion.peorMercado)}
+    ${renderItemEvaluacion('Mejor horario', evaluacion.mejorHorario)}
+  `;
+
+  document.getElementById('real-readiness-status').innerHTML = `
+    <div class="opportunity-warning" style="border-color:${preparacion.listo ? 'rgba(38,166,154,.45)' : 'rgba(255,176,32,.4)'};background:${preparacion.listo ? 'rgba(38,166,154,.1)' : 'rgba(255,176,32,.1)'}">
+      <b>${preparacion.estado}</b><br>
+      Checklist: ${preparacion.aprobadas}/${preparacion.total}. Esta sección no autoriza operar real; solo indica si la prueba demo ya tiene evidencia suficiente.
+    </div>
+  `;
+  document.getElementById('real-readiness-checks').innerHTML = preparacion.checks.map(check => `
+    <div class="readiness-check ${check.ok ? 'readiness-ok' : 'readiness-pending'}">
+      <span>${check.ok ? '✓' : '!'}</span>
+      <div><b>${check.label}</b><small>${check.detalle}</small></div>
+    </div>
+  `).join('');
+
+  document.getElementById('weekly-evaluation-modal').style.display = 'flex';
+}
+
+function cerrarEvaluacionSemanal() {
+  document.getElementById('weekly-evaluation-modal').style.display = 'none';
+}
+
+function cerrarEvaluacionSemanalClick(event) {
+  if (event.target.id === 'weekly-evaluation-modal') cerrarEvaluacionSemanal();
 }
 
 function limpiarRegistroEjecuciones() {
@@ -1603,6 +1676,9 @@ Object.assign(window, {
   abrirBacktesting,
   cerrarBacktesting,
   cerrarBacktestingClick,
+  abrirEvaluacionSemanal,
+  cerrarEvaluacionSemanal,
+  cerrarEvaluacionSemanalClick,
   cerrarOportunidadFueraHorario,
   cerrarOportunidadFueraHorarioClick,
   invertirOportunidadFueraHorario,
