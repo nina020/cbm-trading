@@ -225,6 +225,46 @@ function enviarLogin(res, mensaje = '') {
 </html>`);
 }
 
+function enviarSesionCerrada(res) {
+  const microsoftButton = MICROSOFT_AUTH_ENABLED
+    ? '<a class="btn" href="/auth/microsoft">Iniciar sesión con Microsoft</a>'
+    : '<a class="btn" href="/login">Volver al inicio de sesión</a>';
+  const basicHelp = APP_USERNAME && APP_PASSWORD
+    ? '<p class="small">Si el navegador vuelve a entrar automáticamente, es porque conserva el acceso básico temporal. Usa Microsoft SSO o cierra la ventana para limpiar ese acceso del navegador.</p>'
+    : '';
+  res.writeHead(200, {
+    'Content-Type': 'text/html; charset=utf-8',
+    'Cache-Control': 'no-store',
+    'X-Content-Type-Options': 'nosniff',
+  });
+  res.end(`<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CBM Trading · Sesión cerrada</title>
+  <style>
+    * { box-sizing: border-box; font-family: system-ui, -apple-system, sans-serif; }
+    body { min-height: 100vh; margin: 0; display: grid; place-items: center; background: #131722; color: #d1d4dc; padding: 20px; }
+    .card { width: min(420px, 100%); background: #1e222d; border: 1px solid #2a2e39; border-radius: 18px; padding: 28px; box-shadow: 0 20px 70px rgba(0,0,0,.32); }
+    h1 { margin: 0 0 8px; font-size: 24px; }
+    p { margin: 0 0 22px; color: #9598a1; line-height: 1.45; }
+    .btn { display: block; width: 100%; text-align: center; text-decoration: none; background: #2962ff; color: white; border-radius: 10px; padding: 13px 16px; font-weight: 700; }
+    .btn:hover { background: #1e4fd6; }
+    .small { margin-top: 16px; margin-bottom: 0; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <h1>Sesión cerrada</h1>
+    <p>Tu sesión de CBM Trading se cerró correctamente en este navegador.</p>
+    ${microsoftButton}
+    ${basicHelp}
+  </main>
+</body>
+</html>`);
+}
+
 function redirigir(res, location) {
   res.writeHead(302, { Location: location, 'Cache-Control': 'no-store' });
   res.end();
@@ -322,7 +362,7 @@ function cerrarSesion(res) {
   clearCookie(res, SESSION_COOKIE);
   clearCookie(res, STATE_COOKIE);
   clearCookie(res, NONCE_COOKIE);
-  redirigir(res, '/login');
+  enviarSesionCerrada(res);
 }
 
 function obtenerCredencialesDeriv(modo = 'demo') {
