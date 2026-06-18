@@ -23,6 +23,9 @@ export function determinarEstadoAutomatico({
   if (estadoForzado === 'schedule') {
     return { codigo: 'schedule', titulo: 'Fuera de horario', motivo: motivoForzado || 'La señal se notificará, pero no se ejecutará automáticamente.' };
   }
+  if (estadoForzado === 'real_observe') {
+    return { codigo: 'schedule', titulo: 'Observando en real', motivo: motivoForzado || 'Cuenta real controlada: la app avisa, pero no ejecuta automáticamente.' };
+  }
   if (estadoForzado === 'frequency') {
     return { codigo: 'frequency', titulo: 'Frecuencia limitada', motivo: motivoForzado || 'La señal cumple, pero se alcanzó el límite configurado.' };
   }

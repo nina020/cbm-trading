@@ -369,7 +369,41 @@ function notificarOportunidadFueraHorario({ mercadoId, nombre, tipo, puntuacion,
   }
 }
 
-function mostrarOportunidadFueraHorario({ mercadoId, nombre, tipo, puntuacion, entrada }) {
+function notificarOportunidadReal({ mercadoId, nombre, tipo, puntuacion, entrada }) {
+  const clave = `real:${mercadoId}:${tipo}`;
+  const ahora = Date.now();
+  if (ahora - (notificacionesOportunidad[clave] || 0) < 15 * 60 * 1000) return;
+  notificacionesOportunidad[clave] = ahora;
+
+  const mensaje = `${nombre} ${tipo}: calidad ${puntuacion}/100 en observación real. Entrada aprox. ${Number(entrada).toFixed(3)}.`;
+  registrarLogAuto(`🔔 Oportunidad real detectada: ${mensaje}`, 'info');
+  mostrarOportunidadFueraHorario({
+    mercadoId,
+    nombre,
+    tipo,
+    puntuacion,
+    entrada,
+    origen: 'real_observe',
+  });
+
+  if ('Notification' in window) {
+    if (Notification.permission === 'granted') {
+      new Notification('CBM Trading: oportunidad real detectada', {
+        body: `${mensaje} Revisa la app antes de confirmar dinero real.`,
+      });
+    } else if (Notification.permission === 'default') {
+      Notification.requestPermission().then(permission => {
+        if (permission === 'granted') {
+          new Notification('CBM Trading: oportunidad real detectada', {
+            body: `${mensaje} Revisa la app antes de confirmar dinero real.`,
+          });
+        }
+      }).catch(() => {});
+    }
+  }
+}
+
+function mostrarOportunidadFueraHorario({ mercadoId, nombre, tipo, puntuacion, entrada, origen = 'offhours' }) {
   const mercado = mercadosActivos[mercadoId];
   const desviacion = Number(mercado?.desviacion) || 0;
   const sl = tipo === 'BUY' ? entrada - desviacion * 2 : entrada + desviacion * 2;
@@ -389,7 +423,22 @@ function mostrarOportunidadFueraHorario({ mercadoId, nombre, tipo, puntuacion, e
     riesgo: objetivos.riesgo,
     objetivo: objetivos.objetivo,
     modo: modoEjecucion,
+    origen,
   };
+
+  const esReal = modoEjecucion === 'real';
+  const warning = document.getElementById('offhours-warning');
+  const modeNote = document.getElementById('offhours-mode-note');
+  if (warning) {
+    warning.textContent = esReal
+      ? 'La señal cumple la calidad configurada en cuenta real. La app NO invierte sola: revisa los datos y confirma manualmente solo si quieres usar dinero real.'
+      : 'La señal cumple las reglas de calidad, pero apareció fuera del horario automático. La app no invierte sola: tú decides si quieres entrar ahora.';
+  }
+  if (modeNote) {
+    modeNote.innerHTML = esReal
+      ? 'Modo actual: <b id="offhours-mode">Cuenta real controlada</b>. Esta acción puede usar dinero real y requiere confirmación manual.'
+      : 'Modo actual: <b id="offhours-mode">—</b>. Cambia el modo arriba antes de confirmar si quieres usar simulación o cuenta demo real.';
+  }
 
   document.getElementById('offhours-market').textContent = nombre;
   document.getElementById('offhours-type').textContent = tipo;
@@ -402,10 +451,14 @@ function mostrarOportunidadFueraHorario({ mercadoId, nombre, tipo, puntuacion, e
   document.getElementById('offhours-target').textContent = `$${objetivos.objetivo.toFixed(2)}`;
   document.getElementById('offhours-mode').textContent = modoEjecucion === 'demo'
     ? 'Cuenta demo real'
-    : 'Simulación segura';
+    : modoEjecucion === 'real'
+      ? 'Cuenta real controlada'
+      : 'Simulación segura';
   document.getElementById('offhours-action').textContent = modoEjecucion === 'demo'
     ? 'Invertir ahora en demo'
-    : 'Abrir simulación ahora';
+    : modoEjecucion === 'real'
+      ? 'Evaluar operación real'
+      : 'Abrir simulación ahora';
   document.getElementById('offhours-modal').style.display = 'flex';
 }
 
@@ -441,7 +494,9 @@ async function invertirOportunidadFueraHorario() {
       boton.disabled = false;
       boton.textContent = modoEjecucion === 'demo'
         ? 'Invertir ahora en demo'
-        : 'Abrir simulación ahora';
+        : modoEjecucion === 'real'
+          ? 'Evaluar operación real'
+          : 'Abrir simulación ahora';
     }
   }
 }
@@ -1601,10 +1656,11 @@ async function agregarMercado() {
           registros: executionJournal.registros,
         });
         const autoActivo = autoTrader.estaActivo(id);
+        const observacionRealActiva = modoEjecucion === 'real';
         const disparo = signalTrigger.evaluar({
           tipo: tipoSenal,
           puntuacion: resultadoSenal.calidad.puntuacion,
-          activo: autoActivo && reglasEstrategia.permitido,
+          activo: (autoActivo && reglasEstrategia.permitido) || observacionRealActiva,
           config: configMercado,
         });
         actualizarPanelAutomatico(id, {
@@ -1613,13 +1669,32 @@ async function agregarMercado() {
           puntuacion: resultadoSenal.calidad.puntuacion,
           confirmaciones: disparo.confirmaciones,
           cooldownRestante: autoTrader.cooldownRestante(id),
-          estadoForzado: autoActivo && tipoSenal !== 'WAIT' && !reglasEstrategia.permitido
-            ? reglasEstrategia.codigo
-            : null,
-          motivoForzado: reglasEstrategia.motivo,
+          estadoForzado: observacionRealActiva
+            ? 'real_observe'
+            : autoActivo && tipoSenal !== 'WAIT' && !reglasEstrategia.permitido
+              ? reglasEstrategia.codigo
+              : null,
+          motivoForzado: observacionRealActiva
+            ? 'Si la señal cumple calidad, recibirás aviso para evaluar una operación manual.'
+            : reglasEstrategia.motivo,
         });
         if (
+          observacionRealActiva
+          && tipoSenal !== 'WAIT'
+          && disparo.superaUmbral
+          && disparo.confirmada
+        ) {
+          notificarOportunidadReal({
+            mercadoId: id,
+            nombre,
+            tipo: tipoSenal,
+            puntuacion: resultadoSenal.calidad.puntuacion,
+            entrada: precio,
+          });
+        }
+        if (
           autoActivo
+          && !observacionRealActiva
           && tipoSenal !== 'WAIT'
           && disparo.superaUmbral
           && disparo.confirmada
@@ -1634,7 +1709,7 @@ async function agregarMercado() {
             entrada: precio,
           });
         }
-        if (disparo.ejecutar) {
+        if (disparo.ejecutar && !observacionRealActiva) {
           actualizarPanelAutomatico(id, { estadoForzado: 'opening' });
           registrarLogAuto(
             `${nombre} ${tipoSenal}: calidad confirmada ${resultadoSenal.calidad.puntuacion}/100. Abriendo operación automática.`,

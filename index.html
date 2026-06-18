@@ -519,7 +519,7 @@ table.history-table tr:last-child td { border-bottom: none; }
       <h2>Oportunidad fuera de horario</h2>
       <button class="modal-close" onclick="cerrarOportunidadFueraHorario()">✕ Cerrar</button>
     </div>
-    <div class="opportunity-warning">
+    <div class="opportunity-warning" id="offhours-warning">
       La señal cumple las reglas de calidad, pero apareció fuera del horario automático. La app no invierte sola: tú decides si quieres entrar ahora.
     </div>
     <div class="opportunity-grid">
@@ -533,7 +533,7 @@ table.history-table tr:last-child td { border-bottom: none; }
       <div class="opportunity-item"><small>Riesgo máximo</small><b id="offhours-risk">—</b></div>
       <div class="opportunity-item"><small>Objetivo</small><b id="offhours-target">—</b></div>
     </div>
-    <div class="risk-note">Modo actual: <b id="offhours-mode">—</b>. Cambia el modo arriba antes de confirmar si quieres usar simulación o cuenta demo real.</div>
+    <div class="risk-note" id="offhours-mode-note">Modo actual: <b id="offhours-mode">—</b>. Cambia el modo arriba antes de confirmar si quieres usar simulación o cuenta demo real.</div>
     <div style="margin-top:16px;display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap">
       <button class="modal-close" onclick="cerrarOportunidadFueraHorario()">Descartar</button>
       <button class="btn-add" id="offhours-action" onclick="invertirOportunidadFueraHorario()">Invertir ahora</button>
