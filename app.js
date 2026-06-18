@@ -51,7 +51,7 @@ let historialId = 0;
 let modoEjecucion = 'simulacion';
 const REAL_CONTROLADO_MAX_STAKE = 2;
 let saldoReal = 10000;
-let saldoRealInicial = null;
+const saldosInicialesPorCuenta = { demo: null, real: null };
 let portfolioWs = null;
 const contratosDerivAbiertosPorCuenta = { demo: [], real: [] };
 let positionChart = null;
@@ -92,19 +92,32 @@ function renderRegistroEjecuciones(registros) {
 }
 
 function renderResumenEjecuciones(registros = []) {
-  const idsAbiertosDeriv = new Set(contratosDerivAbiertosPorCuenta.demo.map(id => String(id)));
-  const registrosDemo = registros.filter(item => item.modo === 'demo');
-  const registrosVigentes = registrosDemo.filter(item => (
+  const cuentaActual = modoEjecucion === 'real' ? 'real' : 'demo';
+  const idsAbiertosDeriv = new Set((contratosDerivAbiertosPorCuenta[cuentaActual] || []).map(id => String(id)));
+  const registrosCuenta = registros.filter(item => item.modo === cuentaActual);
+  const registrosVigentes = registrosCuenta.filter(item => (
     item.estado !== 'pendiente' || idsAbiertosDeriv.has(String(item.id))
   ));
   const ganadas = registrosVigentes.filter(item => item.estado === 'ganada').length;
   const perdidas = registrosVigentes.filter(item => item.estado === 'perdida').length;
   const resueltas = ganadas + perdidas;
   const winrate = resueltas > 0 ? `${((ganadas / resueltas) * 100).toFixed(1)}%` : '—';
+  const pnlCerrado = registrosVigentes.reduce((total, item) => {
+    if (item.estado === 'pendiente') return total;
+    const pnl = Number(item.pnlNeto ?? item.pnl);
+    return Number.isFinite(pnl) ? total + pnl : total;
+  }, 0);
   const perdidaAcumulada = registrosVigentes.reduce((totalPerdido, item) => {
     const pnl = Number(item.pnlNeto ?? item.pnl);
     return Number.isFinite(pnl) && pnl < 0 ? totalPerdido + Math.abs(pnl) : totalPerdido;
   }, 0);
+
+  const pnlEl = document.getElementById('hist-pnl');
+  const pnlLabel = document.getElementById('hist-pnl-label');
+  if (pnlLabel) pnlLabel.textContent = cuentaActual === 'real' ? 'P&L real cerrado' : 'P&L demo cerrado';
+  pnlEl.textContent = (pnlCerrado >= 0 ? '+$' : '-$')
+    + Math.abs(pnlCerrado).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  pnlEl.style.color = pnlCerrado >= 0 ? '#26a69a' : '#ef5350';
 
   document.getElementById('hist-total').textContent = registrosVigentes.length;
   document.getElementById('hist-ganadas').textContent = ganadas;
@@ -804,6 +817,7 @@ function cambiarModoEjecucion(modo) {
         : 'Modo simulación segura activado. No se enviarán órdenes a Deriv.',
     modoEjecucion === 'real' || modoEjecucion === 'demo' ? 'error' : 'success'
   );
+  renderResumenEjecuciones(executionJournal.registros);
   actualizarSaldo();
   cargarPortfolio();
 }
@@ -855,14 +869,14 @@ function registrarLogAuto(mensaje, tipo) {
 }
 
 function actualizarStatsBalance() {
+  const cuentaActual = modoEjecucion === 'real' ? 'real' : 'demo';
+  const labelSaldo = document.getElementById('hist-balance-label');
+  if (labelSaldo) labelSaldo.textContent = cuentaActual === 'real' ? 'Saldo real' : 'Saldo demo';
   const saldoEl = document.getElementById('hist-saldo-sim');
+  const saldoInicial = saldosInicialesPorCuenta[cuentaActual];
   saldoEl.textContent = '$' + saldoReal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
-  saldoEl.style.color = saldoRealInicial === null ? 'var(--text-primary)' : (saldoReal >= saldoRealInicial ? '#26a69a' : '#ef5350');
-
-  const pnlTotal = saldoRealInicial === null ? 0 : saldoReal - saldoRealInicial;
-  const pnlEl = document.getElementById('hist-pnl');
-  pnlEl.textContent = (pnlTotal >= 0 ? '+$' : '-$') + Math.abs(pnlTotal).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
-  pnlEl.style.color = pnlTotal >= 0 ? '#26a69a' : '#ef5350';
+  saldoEl.style.color = saldoInicial === null ? 'var(--text-primary)' : (saldoReal >= saldoInicial ? '#26a69a' : '#ef5350');
+  renderResumenEjecuciones(executionJournal?.registros || []);
 }
 
 async function actualizarSaldo() {
@@ -874,9 +888,10 @@ async function actualizarSaldo() {
     const data = await obtenerCuenta(modoEjecucion === 'real' ? 'real' : 'demo');
     const el = document.getElementById('balance-value');
     if (data.accountId) {
+      const cuentaActual = modoEjecucion === 'real' ? 'real' : 'demo';
       saldoReal = parseFloat(data.balance);
       riskManager.setSaldo(saldoReal);
-      if (saldoRealInicial === null) saldoRealInicial = saldoReal;
+      if (saldosInicialesPorCuenta[cuentaActual] === null) saldosInicialesPorCuenta[cuentaActual] = saldoReal;
       const balance = saldoReal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
       el.textContent = `$${balance} ${data.currency}`;
       actualizarStatsBalance();
