@@ -769,10 +769,10 @@ function limpiarRegistroEjecuciones() {
 function alternarRegistroEjecuciones() {
   const modal = document.getElementById('execution-modal');
   const boton = document.getElementById('execution-toggle');
-  if (!modal || !boton) return;
+  if (!modal) return;
 
   modal.style.display = 'flex';
-  boton.setAttribute('aria-expanded', 'true');
+  boton?.setAttribute('aria-expanded', 'true');
 }
 
 function cerrarEjecuciones() {
