@@ -51,8 +51,8 @@ export function createRealPositionCard({
       <div class="pos-status">Cargando...</div>
     </div>
     <div class="position-actions">
-      <button class="btn-history position-chart-button" onclick="verGraficoPosicion('${mercadoId}', '${nombre}')">Ver gráfico</button>
-      <button class="btn-close" onclick="cerrarPosicion(${contrato.contract_id})">Cerrar</button>
+      <button class="btn-history position-chart-button" onclick="verGraficoPosicion('${mercadoId}', '${nombre}')">Ver gráfico en vivo</button>
+      <button class="btn-close" onclick="cerrarPosicion(${contrato.contract_id})">Cerrar operación</button>
     </div>
   `;
   return div;
@@ -78,8 +78,8 @@ export function createSimulatedPositionCard(posicion, objetivos) {
       <div class="pos-status">Abierto</div>
     </div>
     <div class="position-actions">
-      <button class="btn-history" onclick="verGraficoPosicion('${posicion.mercadoId}', '${posicion.nombre}')">Ver gráfico</button>
-      <button class="btn-close" onclick="cerrarPosicionSimulada('${posicion.id}')">Cerrar</button>
+      <button class="btn-history" onclick="verGraficoPosicion('${posicion.mercadoId}', '${posicion.nombre}')">Ver gráfico en vivo</button>
+      <button class="btn-close" onclick="cerrarPosicionSimulada('${posicion.id}')">Cerrar operación</button>
     </div>
   `;
   return div;

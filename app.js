@@ -55,6 +55,8 @@ const saldosInicialesPorCuenta = { demo: null, real: null };
 let portfolioWs = null;
 const contratosDerivAbiertosPorCuenta = { demo: [], real: [] };
 let positionChart = null;
+let positionChartWs = null;
+let positionChartTimer = null;
 let cooldownAutoSeg = 60;
 let signalConfig = { ...SIGNAL_CONFIG_DEFAULTS };
 let strategyConfig = { ...STRATEGY_CONFIG_DEFAULTS };
@@ -272,7 +274,6 @@ function renderEstadoRiesgoGlobal() {
 }
 
 function abrirConfiguracionRiesgo() {
-  document.getElementById('menu-dropdown').classList.remove('open');
   const estado = globalRiskManager.estado(obtenerRegistrosParaRiesgo());
   document.getElementById('global-max-daily-loss').value = estado.config.perdidaMaximaDiaria;
   document.getElementById('global-max-open').value = estado.config.maxPosicionesAbiertas;
@@ -619,7 +620,6 @@ function renderCalibracionesMercado() {
 }
 
 function abrirConfiguracionSenales() {
-  document.getElementById('menu-dropdown').classList.remove('open');
   document.getElementById('signal-threshold').value = signalConfig.umbralMinimo;
   document.getElementById('signal-confirmations').value = signalConfig.confirmacionesRequeridas;
   document.getElementById('signal-filter-auto').checked = signalConfig.filtrarAutoTrading;
@@ -677,12 +677,7 @@ function eliminarCalibracionMercado(mercadoId) {
   registrarLogAuto(`${NOMBRES_SIMBOLOS[mercadoId] || mercadoId}: calibración eliminada.`, 'info');
 }
 
-function toggleMenu() {
-  document.getElementById('menu-dropdown').classList.toggle('open');
-}
-
 function abrirBacktesting() {
-  document.getElementById('menu-dropdown').classList.remove('open');
   document.getElementById('backtest-modal').style.display = 'flex';
 }
 
@@ -714,7 +709,6 @@ function renderItemEvaluacion(label, item, empty = 'Sin datos') {
 }
 
 function abrirEvaluacionSemanal() {
-  document.getElementById('menu-dropdown').classList.remove('open');
   const evaluacion = evaluarSemanaTrading({
     registros: executionJournal.registros,
     now: new Date(),
@@ -812,37 +806,94 @@ async function verGraficoPosicion(mercadoId, nombre) {
   panel.style.display = 'block';
   contenedor.style.display = 'none';
   loading.style.display = 'block';
-  loading.textContent = `Cargando comportamiento reciente de ${nombre}...`;
-  document.getElementById('position-chart-title').textContent = `${nombre} · comportamiento reciente`;
+  loading.textContent = `Cargando gráfico en vivo de ${nombre}...`;
+  document.getElementById('position-chart-title').textContent = `${nombre} · gráfico en vivo`;
 
-  if (positionChart) {
-    positionChart.remove();
-    positionChart = null;
-  }
+  detenerGraficoPosicionEnVivo();
 
   try {
     const ticks = await obtenerTicksHistoricos(mercadoId, 120);
     if (!ticks.length) throw new Error('No hay precios históricos disponibles');
+    const ticksEnVivo = [...ticks];
+    let ultimoPrecio = ticksEnVivo[ticksEnVivo.length - 1]?.precio ?? null;
     loading.style.display = 'none';
     contenedor.style.display = 'block';
     positionChart = createPositionChart({
       contenedor,
-      ticks,
+      ticks: ticksEnVivo,
       chartTheme: TEMAS[temaActual()],
     });
+    iniciarGraficoPosicionEnVivo({ mercadoId, nombre, ticks: ticksEnVivo, getUltimoPrecio: () => ultimoPrecio, setUltimoPrecio: value => { ultimoPrecio = value; } });
     panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   } catch (error) {
     contenedor.style.display = 'none';
     loading.style.display = 'block';
-    loading.textContent = `No se pudo cargar el gráfico: ${error.message}`;
+    loading.textContent = `No se pudo cargar el gráfico: ${mensajeAmigableError(error)}`;
   }
 }
 
-function cerrarGraficoPosicion() {
+async function iniciarGraficoPosicionEnVivo({ mercadoId, nombre, ticks, getUltimoPrecio, setUltimoPrecio }) {
+  const loading = document.getElementById('position-chart-loading');
+  try {
+    const wsUrl = await obtenerWsUrl(modoEjecucion === 'real' ? 'real' : 'demo');
+    positionChartWs = crearWebSocket(wsUrl, {
+      onOpen: ws => suscribirTicks(ws, mercadoId),
+      onMessage: msg => {
+        if (msg.error) {
+          if (loading) {
+            loading.style.display = 'block';
+            loading.textContent = `Gráfico en vivo pausado: ${mensajeAmigableError(msg.error.message)}`;
+          }
+          return;
+        }
+        if (msg.tick?.quote) setUltimoPrecio(Number(msg.tick.quote));
+      },
+      onError: () => {
+        if (loading) {
+          loading.style.display = 'block';
+          loading.textContent = `No se pudo mantener el gráfico en vivo de ${nombre}.`;
+        }
+      },
+    });
+
+    positionChartTimer = setInterval(() => {
+      const precio = getUltimoPrecio();
+      if (!Number.isFinite(precio) || !positionChart) return;
+      const epoch = Math.floor(Date.now() / 60000) * 60;
+      const ultimo = ticks[ticks.length - 1];
+      if (ultimo?.epoch === epoch) {
+        ultimo.precio = precio;
+      } else {
+        ticks.push({ epoch, precio });
+        if (ticks.length > 180) ticks.shift();
+      }
+      positionChart.update(ticks);
+    }, 60000);
+  } catch (error) {
+    if (loading) {
+      loading.style.display = 'block';
+      loading.textContent = `No se pudo iniciar el gráfico en vivo: ${mensajeAmigableError(error)}`;
+    }
+  }
+}
+
+function detenerGraficoPosicionEnVivo() {
+  if (positionChartTimer) {
+    clearInterval(positionChartTimer);
+    positionChartTimer = null;
+  }
+  if (positionChartWs) {
+    positionChartWs.close();
+    positionChartWs = null;
+  }
   if (positionChart) {
     positionChart.remove();
     positionChart = null;
   }
+}
+
+function cerrarGraficoPosicion() {
+  detenerGraficoPosicionEnVivo();
   const panel = document.getElementById('position-chart-panel');
   const contenedor = document.getElementById('position-chart');
   if (panel) panel.style.display = 'none';
@@ -1829,16 +1880,19 @@ async function agregarMercado() {
       onError: () => {
       const el = document.getElementById(`card-${id}`);
       if (el) el.querySelector('.signal-container').innerHTML =
-        '<div class="signal signal-sell">Error de conexión con Deriv</div>';
+        '<div class="signal signal-sell">Error de conexión con Deriv. Refrescando mercado...</div>';
       btn.disabled = false;
       btn.textContent = '+ Agregar';
+      programarRefrescoMercado(id);
       },
+      onClose: () => programarRefrescoMercado(id),
     });
 
     mercadosActivos[id] = {
       ws,
       nombre,
       perfil,
+      periodo,
       chart,
       precio: null,
       desviacion: null,
@@ -1859,8 +1913,27 @@ async function agregarMercado() {
   }
 }
 
+function programarRefrescoMercado(id) {
+  const mercado = mercadosActivos[id];
+  if (!mercado || mercado.reconnectTimer) return;
+  mercado.reconnectTimer = setTimeout(async () => {
+    if (!mercadosActivos[id]) return;
+    const selector = document.getElementById('select-mercado');
+    const periodoSelector = document.getElementById('select-periodo');
+    const opcion = Array.from(selector.options).find(item => item.value.startsWith(`${id}|`));
+    if (!opcion) return;
+    const periodoActual = periodoSelector.value;
+    quitarMercado(id);
+    selector.value = opcion.value;
+    periodoSelector.value = String(mercado.periodo || periodoActual);
+    await agregarMercado();
+    periodoSelector.value = periodoActual;
+  }, 3000);
+}
+
 function quitarMercado(id) {
   if (mercadosActivos[id]) {
+    if (mercadosActivos[id].reconnectTimer) clearTimeout(mercadosActivos[id].reconnectTimer);
     mercadosActivos[id].ws.close();
     mercadosActivos[id].chart.remove();
     delete mercadosActivos[id];
@@ -1892,7 +1965,6 @@ Object.assign(window, {
   guardarConfiguracionRiesgo,
   reanudarOperativa,
   eliminarCalibracionMercado,
-  toggleMenu,
   abrirBacktesting,
   cerrarBacktesting,
   cerrarBacktestingClick,

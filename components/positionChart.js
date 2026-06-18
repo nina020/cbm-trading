@@ -44,5 +44,17 @@ export function createPositionChart({ contenedor, ticks, chartTheme, periodo = 1
   maSeries.setData(crearMediaMovil(ticks, periodo));
   chart.timeScale().fitContent();
 
-  return chart;
+  return {
+    chart,
+    update(nuevosTicks) {
+      priceSeries.setData(nuevosTicks.map(tick => ({
+        time: tick.epoch,
+        value: tick.precio,
+      })));
+      maSeries.setData(crearMediaMovil(nuevosTicks, periodo));
+    },
+    remove() {
+      chart.remove();
+    },
+  };
 }

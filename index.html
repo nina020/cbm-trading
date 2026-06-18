@@ -66,11 +66,6 @@ body { background: var(--bg-page); color: var(--text-primary); transition: backg
 .account-mode-pill.mode-simulacion { color: var(--accent); border-color: rgba(38,166,154,.45); background: rgba(38,166,154,.1); }
 .theme-toggle { background: var(--bg-stat); border: 1px solid var(--border); border-radius: 6px; padding: 6px 12px; font-size: 13px; cursor: pointer; color: var(--text-primary); display: flex; align-items: center; gap: 6px; }
 .theme-toggle:hover { border-color: #26a69a; }
-.app-menu { position: relative; }
-.menu-dropdown { position: absolute; right: 0; top: 40px; min-width: 180px; background: var(--bg-panel); border: 1px solid var(--border); border-radius: 8px; padding: 6px; display: none; z-index: 1100; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
-.menu-dropdown.open { display: block; }
-.menu-item { width: 100%; background: transparent; border: 0; color: var(--text-primary); padding: 9px 10px; border-radius: 6px; text-align: left; cursor: pointer; font-size: 13px; }
-.menu-item:hover { background: var(--bg-stat); color: #26a69a; }
 
 .summary-bar { margin: 16px 18px 0; background: var(--bg-panel); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 14px; display: flex; flex-direction: column; gap: 12px; box-shadow: var(--shadow); }
 .summary-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(112px, 1fr)); gap: 10px; }
@@ -326,15 +321,6 @@ table.history-table tr:last-child td { border-bottom: none; }
       <div class="dot"></div>
       <span>Conectado</span>
     </div>
-    <div class="app-menu">
-      <button class="theme-toggle" id="menu-toggle" onclick="toggleMenu()">Menú ▾</button>
-      <div class="menu-dropdown" id="menu-dropdown">
-        <button class="menu-item" onclick="abrirBacktesting()">Backtesting histórico</button>
-        <button class="menu-item" onclick="abrirEvaluacionSemanal()">Evaluación semanal</button>
-        <button class="menu-item" onclick="abrirConfiguracionSenales()">Calidad de señales</button>
-        <button class="menu-item" onclick="abrirConfiguracionRiesgo()">Límites globales de riesgo</button>
-      </div>
-    </div>
     <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()">🌙 Oscuro</button>
   </div>
 </div>
@@ -527,7 +513,7 @@ table.history-table tr:last-child td { border-bottom: none; }
       <div class="section-title-row">
         <div>
           <div class="section-title" id="position-chart-title">Comportamiento del mercado</div>
-          <div class="market-ranking-note" style="margin:3px 0 0">Precio reciente en azul y media móvil de 14 períodos en amarillo.</div>
+          <div class="market-ranking-note" style="margin:3px 0 0">Precio en vivo minuto a minuto en azul y media móvil de 14 períodos en amarillo.</div>
         </div>
         <button class="modal-close" onclick="cerrarGraficoPosicion()">Ocultar gráfico</button>
       </div>
