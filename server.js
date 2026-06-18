@@ -1,4 +1,5 @@
 const http = require('node:http');
+const crypto = require('node:crypto');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const cloudStateStore = require('./cloudStateStore');
@@ -14,12 +15,27 @@ const REAL_TOKEN = process.env.DERIV_REAL_TOKEN;
 const REAL_ACCOUNT_ID = process.env.DERIV_REAL_ACCOUNT_ID;
 const APP_USERNAME = process.env.APP_USERNAME;
 const APP_PASSWORD = process.env.APP_PASSWORD;
+const MICROSOFT_CLIENT_ID = process.env.MICROSOFT_CLIENT_ID;
+const MICROSOFT_CLIENT_SECRET = process.env.MICROSOFT_CLIENT_SECRET;
+const MICROSOFT_TENANT_ID = process.env.MICROSOFT_TENANT_ID;
+const MICROSOFT_REDIRECT_URI = process.env.MICROSOFT_REDIRECT_URI;
+const MICROSOFT_ALLOWED_EMAILS = (process.env.MICROSOFT_ALLOWED_EMAILS || '')
+  .split(',')
+  .map(email => email.trim().toLowerCase())
+  .filter(Boolean);
+const SESSION_SECRET = process.env.SESSION_SECRET;
+const MICROSOFT_AUTH_ENABLED = Boolean(
+  MICROSOFT_CLIENT_ID && MICROSOFT_CLIENT_SECRET && MICROSOFT_TENANT_ID && SESSION_SECRET,
+);
 const INDEX_PATH = path.join(__dirname, 'index.html');
 const CHARTS_PATH = path.join(
   __dirname,
   'node_modules/lightweight-charts/dist/lightweight-charts.standalone.production.js',
 );
 const PUBLIC_JS_ROOTS = ['components', 'services', 'trading'];
+const SESSION_COOKIE = 'cbm_session';
+const STATE_COOKIE = 'cbm_ms_state';
+const NONCE_COOKIE = 'cbm_ms_nonce';
 
 async function readJson(req) {
   const chunks = [];
@@ -43,7 +59,89 @@ function sendJson(res, status, body) {
   res.end(JSON.stringify(body));
 }
 
-function autenticado(req) {
+function parseCookies(req) {
+  const header = req.headers.cookie || '';
+  return Object.fromEntries(header.split(';').map(item => {
+    const [key, ...rest] = item.trim().split('=');
+    return [key, decodeURIComponent(rest.join('=') || '')];
+  }).filter(([key]) => key));
+}
+
+function cookieOptions({ maxAge = 3600, httpOnly = true } = {}) {
+  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+  return `Path=/; Max-Age=${maxAge}; SameSite=Lax${secure}${httpOnly ? '; HttpOnly' : ''}`;
+}
+
+function setCookie(res, name, value, options = {}) {
+  const cookie = `${name}=${encodeURIComponent(value)}; ${cookieOptions(options)}`;
+  const previous = res.getHeader?.('Set-Cookie');
+  if (!previous) {
+    res.setHeader('Set-Cookie', cookie);
+  } else {
+    res.setHeader('Set-Cookie', Array.isArray(previous) ? [...previous, cookie] : [previous, cookie]);
+  }
+}
+
+function clearCookie(res, name) {
+  setCookie(res, name, '', { maxAge: 0 });
+}
+
+function base64url(input) {
+  return Buffer.from(input)
+    .toString('base64')
+    .replaceAll('+', '-')
+    .replaceAll('/', '_')
+    .replace(/=+$/, '');
+}
+
+function base64urlJson(value) {
+  return base64url(JSON.stringify(value));
+}
+
+function parseBase64urlJson(value) {
+  const normalized = value.replaceAll('-', '+').replaceAll('_', '/');
+  return JSON.parse(Buffer.from(normalized, 'base64').toString('utf8'));
+}
+
+function firmar(payload) {
+  return base64url(crypto.createHmac('sha256', SESSION_SECRET).update(payload).digest());
+}
+
+function crearSesion(usuario) {
+  const payload = base64urlJson({
+    ...usuario,
+    exp: Math.floor(Date.now() / 1000) + 8 * 60 * 60,
+  });
+  return `${payload}.${firmar(payload)}`;
+}
+
+function leerSesion(req) {
+  if (!MICROSOFT_AUTH_ENABLED) return null;
+  const token = parseCookies(req)[SESSION_COOKIE];
+  if (!token || !token.includes('.')) return null;
+  const [payload, signature] = token.split('.');
+  const expected = firmar(payload);
+  const signatureBuffer = Buffer.from(signature);
+  const expectedBuffer = Buffer.from(expected);
+  if (
+    signatureBuffer.length !== expectedBuffer.length
+    || !crypto.timingSafeEqual(signatureBuffer, expectedBuffer)
+  ) return null;
+  const session = parseBase64urlJson(payload);
+  if (!session.exp || session.exp < Math.floor(Date.now() / 1000)) return null;
+  return session;
+}
+
+function origenPublico(req) {
+  const proto = req.headers['x-forwarded-proto'] || (req.socket.encrypted ? 'https' : 'http');
+  return `${proto}://${req.headers.host || `localhost:${PORT}`}`;
+}
+
+function redirectUri(req) {
+  return MICROSOFT_REDIRECT_URI || `${origenPublico(req)}/auth/microsoft/callback`;
+}
+
+function basicAutenticado(req) {
   if (!APP_USERNAME || !APP_PASSWORD) return process.env.NODE_ENV !== 'production';
   const authorization = req.headers.authorization || '';
   if (!authorization.startsWith('Basic ')) return false;
@@ -60,6 +158,19 @@ function autenticado(req) {
   }
 }
 
+function autenticado(req) {
+  return Boolean(leerSesion(req)) || basicAutenticado(req);
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
+}
+
 function solicitarAutenticacion(res) {
   res.writeHead(401, {
     'WWW-Authenticate': 'Basic realm="CBM Trading", charset="UTF-8"',
@@ -68,6 +179,150 @@ function solicitarAutenticacion(res) {
     'X-Content-Type-Options': 'nosniff',
   });
   res.end('Autenticación requerida');
+}
+
+function enviarLogin(res, mensaje = '') {
+  const mensajeSeguro = escapeHtml(mensaje);
+  const microsoftButton = MICROSOFT_AUTH_ENABLED
+    ? '<a class="btn" href="/auth/microsoft">Iniciar sesión con Microsoft</a>'
+    : '<div class="note warn">Microsoft SSO no está configurado todavía. Revisa las variables de entorno en Render.</div>';
+  const basicButton = APP_USERNAME && APP_PASSWORD
+    ? '<a class="link" href="/auth/basic">Usar acceso básico temporal</a>'
+    : '';
+  res.writeHead(200, {
+    'Content-Type': 'text/html; charset=utf-8',
+    'Cache-Control': 'no-store',
+    'X-Content-Type-Options': 'nosniff',
+  });
+  res.end(`<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CBM Trading · Login</title>
+  <style>
+    * { box-sizing: border-box; font-family: system-ui, -apple-system, sans-serif; }
+    body { min-height: 100vh; margin: 0; display: grid; place-items: center; background: #131722; color: #d1d4dc; padding: 20px; }
+    .card { width: min(420px, 100%); background: #1e222d; border: 1px solid #2a2e39; border-radius: 18px; padding: 28px; box-shadow: 0 20px 70px rgba(0,0,0,.32); }
+    h1 { margin: 0 0 8px; font-size: 24px; }
+    p { margin: 0 0 22px; color: #9598a1; line-height: 1.45; }
+    .btn { display: block; width: 100%; text-align: center; text-decoration: none; background: #2962ff; color: white; border-radius: 10px; padding: 13px 16px; font-weight: 700; }
+    .btn:hover { background: #1e4fd6; }
+    .link { display: block; text-align: center; margin-top: 16px; color: #26a69a; text-decoration: none; font-size: 13px; }
+    .note { margin: 0 0 16px; padding: 10px 12px; border-radius: 10px; background: rgba(239,83,80,.12); border: 1px solid rgba(239,83,80,.35); color: #ffb4b4; font-size: 13px; }
+    .warn { color: #f6c56f; background: rgba(214,128,0,.12); border-color: rgba(214,128,0,.35); }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <h1>CBM Trading</h1>
+    <p>Accede de forma segura para operar tu panel.</p>
+    ${mensajeSeguro ? `<div class="note">${mensajeSeguro}</div>` : ''}
+    ${microsoftButton}
+    ${basicButton}
+  </main>
+</body>
+</html>`);
+}
+
+function redirigir(res, location) {
+  res.writeHead(302, { Location: location, 'Cache-Control': 'no-store' });
+  res.end();
+}
+
+function tokenAleatorio() {
+  return base64url(crypto.randomBytes(32));
+}
+
+async function iniciarMicrosoft(req, res) {
+  if (!MICROSOFT_AUTH_ENABLED) {
+    enviarLogin(res, 'Microsoft SSO no está configurado completo en el servidor.');
+    return;
+  }
+  const state = tokenAleatorio();
+  const nonce = tokenAleatorio();
+  setCookie(res, STATE_COOKIE, state, { maxAge: 600 });
+  setCookie(res, NONCE_COOKIE, nonce, { maxAge: 600 });
+  const params = new URLSearchParams({
+    client_id: MICROSOFT_CLIENT_ID,
+    response_type: 'code',
+    redirect_uri: redirectUri(req),
+    response_mode: 'query',
+    scope: 'openid profile email',
+    state,
+    nonce,
+    prompt: 'select_account',
+  });
+  redirigir(res, `https://login.microsoftonline.com/${MICROSOFT_TENANT_ID}/oauth2/v2.0/authorize?${params}`);
+}
+
+async function finalizarMicrosoft(req, res) {
+  if (!MICROSOFT_AUTH_ENABLED) {
+    enviarLogin(res, 'Microsoft SSO no está configurado completo en el servidor.');
+    return;
+  }
+  const url = new URL(req.url, origenPublico(req));
+  const code = url.searchParams.get('code');
+  const state = url.searchParams.get('state');
+  const error = url.searchParams.get('error_description') || url.searchParams.get('error');
+  const cookies = parseCookies(req);
+
+  if (error) {
+    enviarLogin(res, `Microsoft rechazó el inicio de sesión: ${error}`);
+    return;
+  }
+  if (!code || !state || state !== cookies[STATE_COOKIE]) {
+    enviarLogin(res, 'No se pudo validar la respuesta de Microsoft. Intenta iniciar sesión de nuevo.');
+    return;
+  }
+
+  const body = new URLSearchParams({
+    client_id: MICROSOFT_CLIENT_ID,
+    client_secret: MICROSOFT_CLIENT_SECRET,
+    code,
+    grant_type: 'authorization_code',
+    redirect_uri: redirectUri(req),
+    scope: 'openid profile email',
+  });
+  const response = await fetch(`https://login.microsoftonline.com/${MICROSOFT_TENANT_ID}/oauth2/v2.0/token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body,
+  });
+  const data = await response.json();
+  if (!response.ok || !data.id_token) {
+    enviarLogin(res, data.error_description || 'Microsoft no devolvió una sesión válida.');
+    return;
+  }
+
+  const [, payload] = data.id_token.split('.');
+  const claims = parseBase64urlJson(payload);
+  const now = Math.floor(Date.now() / 1000);
+  if (claims.aud !== MICROSOFT_CLIENT_ID || claims.exp < now || claims.nonce !== cookies[NONCE_COOKIE]) {
+    enviarLogin(res, 'La sesión de Microsoft no pasó la validación de seguridad.');
+    return;
+  }
+
+  const email = String(claims.preferred_username || claims.email || claims.upn || '').toLowerCase();
+  if (MICROSOFT_ALLOWED_EMAILS.length && !MICROSOFT_ALLOWED_EMAILS.includes(email)) {
+    enviarLogin(res, 'Tu cuenta Microsoft no está autorizada para entrar a esta app.');
+    return;
+  }
+
+  setCookie(res, SESSION_COOKIE, crearSesion({
+    email,
+    name: claims.name || email || 'Usuario Microsoft',
+  }), { maxAge: 8 * 60 * 60 });
+  clearCookie(res, STATE_COOKIE);
+  clearCookie(res, NONCE_COOKIE);
+  redirigir(res, '/');
+}
+
+function cerrarSesion(res) {
+  clearCookie(res, SESSION_COOKIE);
+  clearCookie(res, STATE_COOKIE);
+  clearCookie(res, NONCE_COOKIE);
+  redirigir(res, '/login');
 }
 
 function obtenerCredencialesDeriv(modo = 'demo') {
@@ -222,8 +477,38 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    if (!autenticado(req)) {
+    const parsedPath = new URL(req.url, `http://${req.headers.host || 'localhost'}`).pathname;
+    if (req.method === 'GET' && parsedPath === '/login') {
+      if (autenticado(req)) {
+        redirigir(res, '/');
+      } else {
+        enviarLogin(res);
+      }
+      return;
+    }
+    if (req.method === 'GET' && parsedPath === '/auth/microsoft') {
+      await iniciarMicrosoft(req, res);
+      return;
+    }
+    if (req.method === 'GET' && parsedPath === '/auth/microsoft/callback') {
+      await finalizarMicrosoft(req, res);
+      return;
+    }
+    if (req.method === 'GET' && parsedPath === '/auth/basic') {
       solicitarAutenticacion(res);
+      return;
+    }
+    if (req.method === 'GET' && parsedPath === '/logout') {
+      cerrarSesion(res);
+      return;
+    }
+
+    if (!autenticado(req)) {
+      if (MICROSOFT_AUTH_ENABLED && req.method === 'GET' && (parsedPath === '/' || parsedPath === '/index.html')) {
+        enviarLogin(res);
+      } else {
+        solicitarAutenticacion(res);
+      }
       return;
     }
 

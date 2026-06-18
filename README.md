@@ -20,9 +20,28 @@ Panel web para análisis, simulación, operación en cuenta demo y estructura de
 - `DERIV_TOKEN` y `DERIV_ACCOUNT_ID`: compatibilidad anterior; si no configuras `DERIV_DEMO_*`, se usan como demo.
 - `APP_USERNAME`: usuario para proteger el sitio publicado.
 - `APP_PASSWORD`: contraseña larga y privada para acceder al sitio.
+- `MICROSOFT_CLIENT_ID`: Application (client) ID de Microsoft Entra para SSO.
+- `MICROSOFT_CLIENT_SECRET`: Value del client secret de Microsoft Entra.
+- `MICROSOFT_TENANT_ID`: Directory (tenant) ID de Microsoft Entra.
+- `SESSION_SECRET`: clave larga y privada para firmar sesiones web.
+- `MICROSOFT_ALLOWED_EMAILS`: opcional; lista separada por comas para limitar qué correos Microsoft pueden entrar.
+- `MICROSOFT_REDIRECT_URI`: opcional; por defecto se usa `/auth/microsoft/callback` sobre el dominio público.
 - `PORT`: opcional localmente; el proveedor lo configura en producción.
 
 Nunca guardes el archivo `.env` ni credenciales reales en Git.
+
+## Microsoft SSO
+
+Para iniciar sesión con Microsoft, registra una app en Microsoft Entra ID con
+esta redirect URI:
+
+```txt
+https://cbm-trading.onrender.com/auth/microsoft/callback
+```
+
+Luego configura en Render `MICROSOFT_CLIENT_ID`,
+`MICROSOFT_CLIENT_SECRET`, `MICROSOFT_TENANT_ID` y `SESSION_SECRET`.
+`APP_USERNAME` y `APP_PASSWORD` pueden quedarse como respaldo temporal.
 
 ## Verificación
 

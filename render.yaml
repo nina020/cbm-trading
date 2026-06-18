@@ -27,6 +27,18 @@ services:
         sync: false
       - key: APP_PASSWORD
         sync: false
+      - key: MICROSOFT_CLIENT_ID
+        sync: false
+      - key: MICROSOFT_CLIENT_SECRET
+        sync: false
+      - key: MICROSOFT_TENANT_ID
+        sync: false
+      - key: MICROSOFT_ALLOWED_EMAILS
+        sync: false
+      - key: MICROSOFT_REDIRECT_URI
+        sync: false
+      - key: SESSION_SECRET
+        sync: false
       - key: NODE_ENV
         value: production
       - key: DATABASE_URL
