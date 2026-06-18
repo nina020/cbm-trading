@@ -62,6 +62,8 @@ let ultimoBacktest = null;
 const estadosAutomaticos = {};
 const notificacionesOportunidad = {};
 let oportunidadFueraHorario = null;
+let filtroEjecuciones = 'todos';
+let filtroHistorial = 'todos';
 const riskManager = createRiskManager({ saldoInicial: saldoReal });
 const marketCalibrationStore = createMarketCalibrationStore({
   storageKey: MARKET_CALIBRATION_STORAGE_KEY,
@@ -70,7 +72,7 @@ const globalRiskManager = createGlobalRiskManager({
   storageKey: GLOBAL_RISK_STORAGE_KEY,
 });
 
-await iniciarSincronizacionCloud([
+const cloudSyncReady = iniciarSincronizacionCloud([
   STORAGE_KEY,
   SIM_STORAGE_KEY,
   EXECUTION_STORAGE_KEY,
@@ -78,17 +80,70 @@ await iniciarSincronizacionCloud([
   STRATEGY_CONFIG_STORAGE_KEY,
   MARKET_CALIBRATION_STORAGE_KEY,
   GLOBAL_RISK_STORAGE_KEY,
-]);
+]).catch(error => {
+  console.warn('La sincronización cloud no pudo iniciar:', error);
+});
 
 function renderRegistroEjecuciones(registros) {
   renderResumenEjecuciones(registros);
+  const registrosFiltrados = filtrarEjecuciones(registros);
   renderExecutionTable({
-    registros,
+    registros: registrosFiltrados,
     tbody: document.getElementById('execution-body'),
     empty: document.getElementById('execution-empty'),
   });
   renderRankingMercados();
   renderEstadoRiesgoGlobal();
+}
+
+function filtrarEjecuciones(registros) {
+  if (filtroEjecuciones === 'todos') return registros;
+  if (['demo', 'real', 'simulacion'].includes(filtroEjecuciones)) {
+    return registros.filter(item => item.modo === filtroEjecuciones);
+  }
+  return registros.filter(item => item.estado === filtroEjecuciones);
+}
+
+function cambiarFiltroEjecuciones(filtro) {
+  filtroEjecuciones = filtro;
+  document.querySelectorAll('[data-execution-filter]').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.executionFilter === filtro);
+  });
+  renderRegistroEjecuciones(executionJournal.registros);
+}
+
+function filtrarHistorial(registros) {
+  if (filtroHistorial === 'todos') return registros;
+  if (['BUY', 'SELL'].includes(filtroHistorial)) {
+    return registros.filter(item => item.tipo === filtroHistorial);
+  }
+  return registros.filter(item => item.estado === filtroHistorial);
+}
+
+function cambiarFiltroHistorial(filtro) {
+  filtroHistorial = filtro;
+  document.querySelectorAll('[data-history-filter]').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.historyFilter === filtro);
+  });
+  renderHistorial();
+}
+
+function navegarA(id) {
+  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function mensajeAmigableError(error) {
+  const mensaje = String(error?.message || error || 'Error desconocido');
+  if (/account not found/i.test(mensaje)) {
+    return 'Deriv no encontró esa cuenta. Revisa que el token y el Account ID pertenezcan a la misma cuenta.';
+  }
+  if (/invalid token|authorization|unauthorized/i.test(mensaje)) {
+    return 'Deriv rechazó el token. Revisa que esté vigente y tenga permisos Read y Trade.';
+  }
+  if (/network|fetch|websocket|connection/i.test(mensaje)) {
+    return 'No se pudo conectar con Deriv en este momento. Intenta actualizar de nuevo.';
+  }
+  return mensaje;
 }
 
 function renderResumenEjecuciones(registros = []) {
@@ -114,6 +169,8 @@ function renderResumenEjecuciones(registros = []) {
 
   const pnlEl = document.getElementById('hist-pnl');
   const pnlLabel = document.getElementById('hist-pnl-label');
+  const totalLabel = document.getElementById('hist-total-label');
+  if (totalLabel) totalLabel.textContent = cuentaActual === 'real' ? 'Operaciones reales' : 'Operaciones demo';
   if (pnlLabel) pnlLabel.textContent = cuentaActual === 'real' ? 'P&L real cerrado' : 'P&L demo cerrado';
   pnlEl.textContent = (pnlCerrado >= 0 ? '+$' : '-$')
     + Math.abs(pnlCerrado).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -273,6 +330,18 @@ function validarAperturaPorRiesgo(riesgoOperacion) {
 
 function temaActual() {
   return document.body.dataset.theme === 'light' ? 'light' : 'dark';
+}
+
+function actualizarIndicadorModo() {
+  const pill = document.getElementById('account-mode-pill');
+  if (!pill) return;
+  pill.classList.remove('mode-real', 'mode-demo', 'mode-simulacion');
+  pill.classList.add(`mode-${modoEjecucion}`);
+  pill.textContent = modoEjecucion === 'real'
+    ? 'Cuenta real controlada'
+    : modoEjecucion === 'demo'
+      ? 'Cuenta demo real'
+      : 'Simulación segura';
 }
 
 function toggleTheme() {
@@ -872,6 +941,7 @@ function cambiarModoEjecucion(modo) {
         : 'Modo simulación segura activado. No se enviarán órdenes a Deriv.',
     modoEjecucion === 'real' || modoEjecucion === 'demo' ? 'error' : 'success'
   );
+  actualizarIndicadorModo();
   renderResumenEjecuciones(executionJournal.registros);
   actualizarSaldo();
   cargarPortfolio();
@@ -935,6 +1005,7 @@ function actualizarStatsBalance() {
 }
 
 async function actualizarSaldo() {
+  actualizarIndicadorModo();
   const labelSaldo = document.getElementById('balance-label');
   if (labelSaldo) {
     labelSaldo.textContent = modoEjecucion === 'real' ? 'Saldo real (Deriv):' : 'Saldo demo (Deriv):';
@@ -1098,7 +1169,7 @@ async function cargarPortfolio({ manual = false } = {}) {
           pendientesConsultados.delete(String(msg.echo_req.contract_id));
           return;
         }
-        contenedor.innerHTML = `<div class="positions-empty">Error: ${msg.error.message}</div>`;
+        contenedor.innerHTML = `<div class="positions-empty">Error: ${mensajeAmigableError(msg.error.message)}</div>`;
         return;
       }
 
@@ -1152,7 +1223,7 @@ async function cargarPortfolio({ manual = false } = {}) {
       },
     });
   } catch (error) {
-    contenedor.innerHTML = `<div class="positions-empty">Error en ${etiquetaCuenta}: ${error.message}</div>`;
+    contenedor.innerHTML = `<div class="positions-empty">Error en ${etiquetaCuenta}: ${mensajeAmigableError(error)}</div>`;
   } finally {
     if (boton) {
       boton.disabled = false;
@@ -1296,7 +1367,7 @@ async function ejecutarOperacion(mercadoId, tipo, entrada, sl, tp, btnId) {
       cargarPortfolio();
       return true;
   } catch (error) {
-    alert(`❌ Error: ${error.message}`);
+    alert(`❌ Error: ${mensajeAmigableError(error)}`);
     return false;
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = modoEjecucion === 'real' ? 'Ejecutar real controlado' : 'Ejecutar en demo'; }
@@ -1346,7 +1417,7 @@ async function ejecutarOperacionAutomaticaCore(mercadoId, tipo, entrada, sl, tp)
       cargarPortfolio();
       return true;
   } catch (error) {
-    registrarLogAuto(`❌ ${nombre} ${tipo}: ${error.message}`, 'error');
+    registrarLogAuto(`❌ ${nombre} ${tipo}: ${mensajeAmigableError(error)}`, 'error');
     throw error;
   }
 }
@@ -1436,15 +1507,19 @@ function renderHistorial() {
   const tabla = document.getElementById('history-table');
   const tbody = document.getElementById('history-body');
   const vacio = document.getElementById('history-empty');
+  const historialFiltrado = filtrarHistorial(historial);
 
-  if (historial.length === 0) {
+  if (historialFiltrado.length === 0) {
     tabla.style.display = 'none';
     vacio.style.display = 'block';
+    vacio.textContent = historial.length === 0
+      ? 'Aún no se han generado señales BUY/SELL.'
+      : 'No hay señales que coincidan con este filtro.';
   } else {
     tabla.style.display = 'table';
     vacio.style.display = 'none';
 
-    tbody.innerHTML = historial.slice(0, MAX_HISTORIAL_VISIBLE).map(h => {
+    tbody.innerHTML = historialFiltrado.slice(0, MAX_HISTORIAL_VISIBLE).map(h => {
       const tagTipo = h.tipo === 'BUY' ? 'tag-buy' : 'tag-sell';
       const tagEstado = `tag-${h.estado}`;
       const estadoTexto = h.estado === 'pendiente' ? '⏳ Pendiente'
@@ -1595,7 +1670,7 @@ async function agregarMercado() {
       if (msg.error) {
         const el = document.getElementById(`card-${id}`);
         if (el) el.querySelector('.signal-container').innerHTML =
-          `<div class="signal signal-sell">Error: ${msg.error.message}</div>`;
+          `<div class="signal signal-sell">Error: ${mensajeAmigableError(msg.error.message)}</div>`;
         return;
       }
       if (msg.tick) {
@@ -1734,7 +1809,7 @@ async function agregarMercado() {
               signalTrigger.liberar();
               actualizarPanelAutomatico(id, { estadoForzado: 'error' });
               registrarLogAuto(
-                `${nombre} ${tipoSenal}: no se pudo abrir automáticamente. ${error.message}`,
+                `${nombre} ${tipoSenal}: no se pudo abrir automáticamente. ${mensajeAmigableError(error)}`,
                 'error',
               );
             });
@@ -1775,9 +1850,9 @@ async function agregarMercado() {
     const el = document.getElementById(`card-${id}`);
     if (el) {
       el.querySelector('.signal-container').innerHTML =
-        `<div class="signal signal-sell">Error: ${error.message}</div>`;
+        `<div class="signal signal-sell">Error: ${mensajeAmigableError(error)}</div>`;
     } else {
-      alert(`No se pudo agregar ${nombre}: ${error.message}`);
+      alert(`No se pudo agregar ${nombre}: ${mensajeAmigableError(error)}`);
     }
     btn.disabled = false;
     btn.textContent = '+ Agregar';
@@ -1799,21 +1874,6 @@ function quitarMercado(id) {
     document.getElementById('empty').style.display = 'block';
   }
 }
-
-marketCalibrationStore.cargar();
-globalRiskManager.cargar();
-cargarSignalConfig();
-cargarStrategyConfig();
-cargarHistorialGuardado();
-renderResumenEjecuciones([]);
-executionJournal.cargar();
-simulationEngine.cargar();
-actualizarSaldo();
-setInterval(actualizarSaldo, 30000);
-renderHistorial();
-cargarPortfolio();
-actualizarRankingAutomatico();
-setInterval(actualizarRankingAutomatico, 300000);
 
 Object.assign(window, {
   toggleTheme,
@@ -1842,6 +1902,9 @@ Object.assign(window, {
   cerrarOportunidadFueraHorario,
   cerrarOportunidadFueraHorarioClick,
   invertirOportunidadFueraHorario,
+  navegarA,
+  cambiarFiltroEjecuciones,
+  cambiarFiltroHistorial,
   limpiarRegistroEjecuciones,
   alternarRegistroEjecuciones,
   cerrarEjecuciones,
@@ -1866,4 +1929,27 @@ Object.assign(window, {
   abrirMercadoRecomendado,
   agregarMercado,
   quitarMercado,
+});
+
+async function iniciarApp() {
+  await cloudSyncReady;
+  marketCalibrationStore.cargar();
+  globalRiskManager.cargar();
+  cargarSignalConfig();
+  cargarStrategyConfig();
+  cargarHistorialGuardado();
+  renderResumenEjecuciones([]);
+  executionJournal.cargar();
+  simulationEngine.cargar();
+  actualizarSaldo();
+  setInterval(actualizarSaldo, 30000);
+  renderHistorial();
+  cargarPortfolio();
+  actualizarRankingAutomatico();
+  setInterval(actualizarRankingAutomatico, 300000);
+}
+
+iniciarApp().catch(error => {
+  console.error('No se pudo iniciar la app:', error);
+  registrarLogAuto(`No se pudo iniciar completamente la app: ${mensajeAmigableError(error)}`, 'error');
 });

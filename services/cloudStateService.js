@@ -79,7 +79,7 @@ export async function iniciarSincronizacionCloud(keys) {
   interceptarLocalStorage();
   listo = true;
 
-  await Promise.all([...SINCRONIZAR].map(key => {
+  await Promise.allSettled([...SINCRONIZAR].map(key => {
     const raw = localStorage.getItem(key);
     if (raw === null) return Promise.resolve();
     return enviar(key, parseValor(raw));

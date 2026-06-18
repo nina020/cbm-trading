@@ -39,6 +39,10 @@ async function readFileStore() {
     return JSON.parse(raw);
   } catch (error) {
     if (error.code === 'ENOENT') return {};
+    if (error instanceof SyntaxError) {
+      console.warn('Estado local cloud corrupto; se reiniciará al guardar de nuevo.');
+      return {};
+    }
     throw error;
   }
 }

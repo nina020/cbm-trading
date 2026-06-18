@@ -18,6 +18,13 @@
   --text-faint: #5d606b;
   --chart-bg: #1e222d;
   --chart-text: #9598a1;
+  --accent: #26a69a;
+  --danger: #ef5350;
+  --warning: #d68000;
+  --blue: #2962ff;
+  --shadow: 0 18px 50px rgba(0,0,0,.22);
+  --radius-lg: 14px;
+  --radius-md: 10px;
 }
 
 [data-theme="light"] {
@@ -30,16 +37,33 @@
   --text-faint: #9ca3af;
   --chart-bg: #ffffff;
   --chart-text: #6b7280;
+  --shadow: 0 18px 50px rgba(15,23,42,.1);
 }
 
 body { background: var(--bg-page); color: var(--text-primary); transition: background .2s, color .2s; }
-.header { background: var(--bg-panel); border-bottom: 1px solid var(--border); padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
-.header h1 { font-size: 16px; font-weight: 600; color: var(--text-primary); }
+.app-layout { min-height: 100vh; display: grid; grid-template-columns: 230px minmax(0, 1fr); }
+.sidebar { position: sticky; top: 0; height: 100vh; background: linear-gradient(180deg, var(--bg-panel), var(--bg-page)); border-right: 1px solid var(--border); padding: 18px 14px; display: flex; flex-direction: column; gap: 18px; z-index: 900; }
+.sidebar-brand { padding: 4px 6px 14px; border-bottom: 1px solid var(--border); }
+.sidebar-brand strong { display: block; font-size: 18px; color: var(--text-primary); }
+.sidebar-brand span { display: block; margin-top: 4px; font-size: 11px; color: var(--text-faint); }
+.sidebar-nav { display: flex; flex-direction: column; gap: 7px; }
+.side-link { width: 100%; border: 1px solid transparent; background: transparent; color: var(--text-secondary); border-radius: 10px; padding: 10px 12px; text-align: left; cursor: pointer; font-size: 13px; display: flex; align-items: center; gap: 9px; }
+.side-link:hover { background: var(--bg-stat); color: var(--text-primary); border-color: var(--border); }
+.side-link.primary { background: rgba(38,166,154,.12); color: var(--accent); border-color: rgba(38,166,154,.35); }
+.sidebar-footer { margin-top: auto; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-md); background: rgba(38,166,154,.08); color: var(--text-secondary); font-size: 11px; line-height: 1.35; }
+.app-main { min-width: 0; }
+.header { background: rgba(30,34,45,.92); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); padding: 12px 18px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; position: sticky; top: 0; z-index: 800; }
+[data-theme="light"] .header { background: rgba(255,255,255,.9); }
+.header h1 { font-size: 16px; font-weight: 700; color: var(--text-primary); }
 .status { font-size: 13px; display: flex; align-items: center; gap: 6px; color: var(--text-secondary); }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: #26a69a; }
-.header-right { display: flex; align-items: center; gap: 20px; }
-.balance-info { font-size: 13px; display: flex; align-items: center; gap: 8px; color: var(--text-secondary); }
+.header-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.balance-info { font-size: 12px; display: flex; align-items: center; gap: 8px; color: var(--text-secondary); background: var(--bg-stat); border: 1px solid var(--border); border-radius: 999px; padding: 7px 10px; }
 .balance-value { font-weight: 600; color: #26a69a; font-size: 14px; }
+.account-mode-pill { font-size: 12px; border: 1px solid var(--border); border-radius: 999px; padding: 7px 10px; background: var(--bg-stat); color: var(--text-secondary); }
+.account-mode-pill.mode-real { color: var(--danger); border-color: rgba(239,83,80,.45); background: rgba(239,83,80,.1); }
+.account-mode-pill.mode-demo { color: var(--blue); border-color: rgba(41,98,255,.45); background: rgba(41,98,255,.1); }
+.account-mode-pill.mode-simulacion { color: var(--accent); border-color: rgba(38,166,154,.45); background: rgba(38,166,154,.1); }
 .theme-toggle { background: var(--bg-stat); border: 1px solid var(--border); border-radius: 6px; padding: 6px 12px; font-size: 13px; cursor: pointer; color: var(--text-primary); display: flex; align-items: center; gap: 6px; }
 .theme-toggle:hover { border-color: #26a69a; }
 .app-menu { position: relative; }
@@ -48,13 +72,13 @@ body { background: var(--bg-page); color: var(--text-primary); transition: backg
 .menu-item { width: 100%; background: transparent; border: 0; color: var(--text-primary); padding: 9px 10px; border-radius: 6px; text-align: left; cursor: pointer; font-size: 13px; }
 .menu-item:hover { background: var(--bg-stat); color: #26a69a; }
 
-.summary-bar { background: var(--bg-panel); border-bottom: 1px solid var(--border); padding: 14px 20px; display: flex; flex-direction: column; gap: 12px; }
-.summary-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 10px; }
-.summary-stat { background: var(--bg-stat); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; text-align: center; }
+.summary-bar { margin: 16px 18px 0; background: var(--bg-panel); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 14px; display: flex; flex-direction: column; gap: 12px; box-shadow: var(--shadow); }
+.summary-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(112px, 1fr)); gap: 10px; }
+.summary-stat { background: var(--bg-stat); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 9px 10px; text-align: center; }
 .summary-stat-label { font-size: 10px; color: var(--text-faint); }
 .summary-stat-value { font-size: 17px; font-weight: 600; margin-top: 2px; }
 
-.config-row { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
+.config-row { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; padding-top: 2px; }
 .config-group { display: flex; flex-direction: column; gap: 4px; }
 .config-group label { font-size: 11px; color: var(--text-secondary); white-space: nowrap; }
 .config-group select, .config-group input[type="number"], .config-group input[type="time"] { padding: 7px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; background: var(--bg-stat); color: var(--text-primary); }
@@ -67,11 +91,11 @@ body { background: var(--bg-page); color: var(--text-primary); transition: backg
 .invest-mode input[type="number"] { width: 75px; padding: 7px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; background: var(--bg-stat); color: var(--text-primary); }
 .invest-mode input[type="number"]:disabled { opacity: 0.35; cursor: not-allowed; }
 
-.btn-add { background: #26a69a; color: #fff; border: none; border-radius: 6px; padding: 0 18px; height: 34px; font-size: 13px; font-weight: 500; cursor: pointer; white-space: nowrap; }
+.btn-add { background: #26a69a; color: #fff; border: none; border-radius: 8px; padding: 0 18px; height: 34px; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
 .btn-add:hover { background: #1f8a80; }
-.btn-history { background: var(--bg-stat); border: 1px solid var(--border); border-radius: 6px; padding: 0 14px; height: 34px; font-size: 13px; cursor: pointer; color: var(--text-primary); white-space: nowrap; }
+.btn-history { background: var(--bg-stat); border: 1px solid var(--border); border-radius: 8px; padding: 0 14px; height: 34px; font-size: 13px; cursor: pointer; color: var(--text-primary); white-space: nowrap; }
 .btn-history:hover { border-color: #26a69a; }
-.btn-clear { background: var(--bg-stat); border: 1px solid var(--border); border-radius: 6px; padding: 0 14px; height: 34px; font-size: 13px; cursor: pointer; color: #ef5350; white-space: nowrap; }
+.btn-clear { background: var(--bg-stat); border: 1px solid var(--border); border-radius: 8px; padding: 0 14px; height: 34px; font-size: 13px; cursor: pointer; color: #ef5350; white-space: nowrap; }
 .btn-clear:hover { border-color: #ef5350; background: rgba(239,83,80,0.1); }
 
 .divider { width: 1px; height: 34px; background: var(--border); }
@@ -99,10 +123,10 @@ body { background: var(--bg-page); color: var(--text-primary); transition: backg
 .execution-notice { font-size: 11px; color: var(--text-secondary); margin-bottom: 10px; min-height: 16px; }
 .execution-details { display: none; }
 .execution-details.open { display: block; }
-.market-ranking-section { padding: 16px 20px 0; }
+.market-ranking-section { padding: 16px 18px 0; scroll-margin-top: 90px; }
 .market-ranking-note { margin-top: -6px; margin-bottom: 10px; font-size: 10px; color: var(--text-faint); }
 .market-ranking-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
-.market-rank-card { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-panel); }
+.market-rank-card { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg-panel); box-shadow: 0 8px 24px rgba(0,0,0,.08); }
 .market-rank-position { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--bg-stat); font-weight: 600; font-size: 12px; }
 .market-rank-main { display: flex; flex-direction: column; gap: 2px; }
 .market-rank-main strong { font-size: 12px; }
@@ -144,9 +168,9 @@ body { background: var(--bg-page); color: var(--text-primary); transition: backg
 .btn-close:hover { background: rgba(239,83,80,0.2); }
 .positions-empty { padding: 16px; text-align: center; color: var(--text-faint); font-size: 13px; background: var(--bg-panel); border: 1px solid var(--border); border-radius: 8px; }
 
-.markets { padding: 16px 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px; align-items: start; }
+.markets { padding: 16px 18px 22px; display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px; align-items: start; scroll-margin-top: 90px; }
 .empty { grid-column: 1 / -1; text-align: center; padding: 40px; color: var(--text-faint); font-size: 14px; }
-.card { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
+.card { background: var(--bg-panel); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 12px; box-shadow: 0 10px 30px rgba(0,0,0,.1); }
 .card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
 .card-title { font-size: 13px; font-weight: 600; color: var(--text-primary); }
 .card-meta { display: flex; align-items: center; gap: 6px; }
@@ -214,8 +238,8 @@ body { background: var(--bg-page); color: var(--text-primary); transition: backg
 .btn-execute.sell { background: #ef5350; }
 .btn-execute.sell:hover { background: #d63a35; }
 
-.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: none; align-items: center; justify-content: center; z-index: 1000; padding: 20px; }
-.modal-content { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 8px; padding: 20px; max-width: 950px; width: 100%; max-height: 85vh; overflow-y: auto; }
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.68); display: none; align-items: center; justify-content: center; z-index: 1000; padding: 20px; }
+.modal-content { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 16px; padding: 18px; max-width: 950px; width: 100%; max-height: 86vh; overflow-y: auto; box-shadow: var(--shadow); }
 .modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
 .modal-header h2 { font-size: 16px; font-weight: 600; color: var(--text-primary); }
 .modal-close { background: var(--bg-stat); border: 1px solid var(--border); border-radius: 6px; padding: 6px 12px; cursor: pointer; color: var(--text-primary); font-size: 13px; }
@@ -235,13 +259,65 @@ table.history-table tr:last-child td { border-bottom: none; }
 .tag-ganada { background: rgba(38,166,154,0.15); color: #1f8a80; }
 .tag-perdida { background: rgba(239,83,80,0.15); color: #ef5350; }
 .history-empty { padding: 24px; text-align: center; color: var(--text-faint); font-size: 13px; }
+.filter-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 0 0 12px; }
+.filter-chip { border: 1px solid var(--border); background: var(--bg-stat); color: var(--text-secondary); border-radius: 999px; padding: 7px 11px; font-size: 12px; cursor: pointer; }
+.filter-chip.active, .filter-chip:hover { color: var(--accent); border-color: rgba(38,166,154,.45); background: rgba(38,166,154,.1); }
+
+@media (max-width: 980px) {
+  .app-layout { grid-template-columns: 1fr; }
+  .sidebar { position: sticky; top: 0; height: auto; padding: 10px; border-right: 0; border-bottom: 1px solid var(--border); flex-direction: row; align-items: center; overflow-x: auto; }
+  .sidebar-brand { min-width: 160px; border-bottom: 0; padding: 0 8px; }
+  .sidebar-nav { flex-direction: row; min-width: max-content; }
+  .side-link { white-space: nowrap; }
+  .sidebar-footer { display: none; }
+  .header { top: 61px; }
+}
+
+@media (max-width: 680px) {
+  .header { position: static; }
+  .header-right, .config-row { width: 100%; }
+  .balance-info, .account-mode-pill, .theme-toggle, .config-group, .config-group.market select, .config-group.period select, .invest-mode, .btn-add, .btn-history, .btn-clear { width: 100%; justify-content: center; }
+  .divider { display: none; }
+  .summary-bar, .market-ranking-section, .markets { margin-left: 10px; margin-right: 10px; padding-left: 10px; padding-right: 10px; }
+  .summary-stats, .opportunity-grid, .backtest-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .markets { grid-template-columns: 1fr; }
+  .modal-overlay { padding: 10px; align-items: stretch; }
+  .modal-content { max-height: 95vh; }
+  .modal-header { align-items: flex-start; gap: 10px; }
+  .position-card, .section-title-row { align-items: stretch; }
+  .position-actions, .pos-pnl-box { width: 100%; justify-content: space-between; text-align: left; }
+}
 </style>
 </head>
 <body>
 
+<div class="app-layout">
+<aside class="sidebar">
+  <div class="sidebar-brand">
+    <strong>CBM Trading</strong>
+    <span>Centro de operación</span>
+  </div>
+  <nav class="sidebar-nav" aria-label="Navegación principal">
+    <button class="side-link primary" onclick="navegarA('markets')">Trading</button>
+    <button class="side-link" onclick="navegarA('market-ranking-section')">Mercados top</button>
+    <button class="side-link" onclick="abrirPosiciones()">Posiciones</button>
+    <button class="side-link" onclick="abrirHistorial()">Historial</button>
+    <button class="side-link" onclick="alternarRegistroEjecuciones()">Ejecuciones</button>
+    <button class="side-link" onclick="abrirBacktesting()">Backtesting</button>
+    <button class="side-link" onclick="abrirEvaluacionSemanal()">Evaluación</button>
+    <button class="side-link" onclick="abrirConfiguracionSenales()">Señales</button>
+    <button class="side-link" onclick="abrirConfiguracionRiesgo()">Riesgo</button>
+  </nav>
+  <div class="sidebar-footer">
+    Modo real controlado: la app avisa y exige confirmación antes de usar dinero real.
+  </div>
+</aside>
+
+<main class="app-main">
 <div class="header">
-  <h1>📊 CBM Trading</h1>
+  <h1>Panel de trading</h1>
   <div class="header-right">
+    <div class="account-mode-pill mode-simulacion" id="account-mode-pill">Simulación segura</div>
     <div class="balance-info">
       <span id="balance-label">Saldo demo (Deriv):</span>
       <span class="balance-value" id="balance-value">Cargando...</span>
@@ -266,7 +342,7 @@ table.history-table tr:last-child td { border-bottom: none; }
 <div class="summary-bar">
   <div class="summary-stats">
     <div class="summary-stat">
-      <div class="summary-stat-label">Operaciones demo</div>
+      <div class="summary-stat-label" id="hist-total-label">Operaciones demo</div>
       <div class="summary-stat-value" id="hist-total">0</div>
     </div>
     <div class="summary-stat">
@@ -398,6 +474,9 @@ table.history-table tr:last-child td { border-bottom: none; }
   </div>
 </div>
 
+</main>
+</div>
+
 <div class="modal-overlay" id="execution-modal" onclick="cerrarEjecucionesClick(event)">
   <div class="modal-content">
     <div class="modal-header">
@@ -412,6 +491,15 @@ table.history-table tr:last-child td { border-bottom: none; }
     </div>
     <div id="execution-details">
       <div class="execution-notice" id="execution-notice">Las operaciones manuales y automáticas aparecerán aquí.</div>
+      <div class="filter-row" aria-label="Filtros de ejecuciones">
+        <button class="filter-chip active" data-execution-filter="todos" onclick="cambiarFiltroEjecuciones('todos')">Todos</button>
+        <button class="filter-chip" data-execution-filter="demo" onclick="cambiarFiltroEjecuciones('demo')">Demo</button>
+        <button class="filter-chip" data-execution-filter="real" onclick="cambiarFiltroEjecuciones('real')">Real</button>
+        <button class="filter-chip" data-execution-filter="simulacion" onclick="cambiarFiltroEjecuciones('simulacion')">Simulación</button>
+        <button class="filter-chip" data-execution-filter="ganada" onclick="cambiarFiltroEjecuciones('ganada')">Ganadas</button>
+        <button class="filter-chip" data-execution-filter="perdida" onclick="cambiarFiltroEjecuciones('perdida')">Perdidas</button>
+        <button class="filter-chip" data-execution-filter="pendiente" onclick="cambiarFiltroEjecuciones('pendiente')">Pendientes</button>
+      </div>
       <div class="history-table-wrap">
         <table class="history-table">
           <thead>
@@ -464,6 +552,14 @@ table.history-table tr:last-child td { border-bottom: none; }
     <div class="modal-header">
       <h2>Historial detallado de señales</h2>
       <button class="modal-close" onclick="cerrarHistorial()">✕ Cerrar</button>
+    </div>
+    <div class="filter-row" aria-label="Filtros de historial">
+      <button class="filter-chip active" data-history-filter="todos" onclick="cambiarFiltroHistorial('todos')">Todos</button>
+      <button class="filter-chip" data-history-filter="BUY" onclick="cambiarFiltroHistorial('BUY')">BUY</button>
+      <button class="filter-chip" data-history-filter="SELL" onclick="cambiarFiltroHistorial('SELL')">SELL</button>
+      <button class="filter-chip" data-history-filter="ganada" onclick="cambiarFiltroHistorial('ganada')">Ganadas</button>
+      <button class="filter-chip" data-history-filter="perdida" onclick="cambiarFiltroHistorial('perdida')">Perdidas</button>
+      <button class="filter-chip" data-history-filter="pendiente" onclick="cambiarFiltroHistorial('pendiente')">Pendientes</button>
     </div>
     <div class="history-table-wrap">
       <table class="history-table" id="history-table" style="display:none">
