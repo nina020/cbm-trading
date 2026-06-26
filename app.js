@@ -49,6 +49,7 @@ import { evaluarCandidatoCanasta, seleccionarMercadosCanasta } from './trading/b
 
 let mercadosActivos = {};
 let mercadosEscaneados = [];
+let actualizacionRankingEnCurso = false;
 let historial = [];
 let historialId = 0;
 let modoEjecucion = 'simulacion';
@@ -244,6 +245,9 @@ function obtenerPuntuacionMercadoCanasta(mercadoId) {
 }
 
 async function actualizarRankingAutomatico() {
+  if (actualizacionRankingEnCurso) return;
+
+  actualizacionRankingEnCurso = true;
   const contenedor = document.getElementById('market-ranking');
   if (contenedor) {
     contenedor.innerHTML = '<div class="positions-empty">Analizando mercados estables...</div>';
@@ -266,7 +270,14 @@ async function actualizarRankingAutomatico() {
     if (contenedor) {
       contenedor.innerHTML = '<div class="positions-empty">No fue posible actualizar el top de mercados.</div>';
     }
+  } finally {
+    actualizacionRankingEnCurso = false;
   }
+}
+
+function actualizarMercadosTop() {
+  navegarA('market-ranking-section');
+  actualizarRankingAutomatico();
 }
 
 async function abrirMercadoRecomendado(mercadoId) {
@@ -2545,6 +2556,7 @@ Object.assign(window, {
   cerrarOportunidadFueraHorarioClick,
   invertirOportunidadFueraHorario,
   navegarA,
+  actualizarMercadosTop,
   cambiarFiltroEjecuciones,
   cambiarFiltroHistorial,
   limpiarRegistroEjecuciones,
