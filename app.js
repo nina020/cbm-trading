@@ -3,7 +3,7 @@ import {
   STORAGE_KEY, SIM_STORAGE_KEY,
   EXECUTION_STORAGE_KEY, SIGNAL_CONFIG_STORAGE_KEY, STRATEGY_CONFIG_STORAGE_KEY,
   MARKET_CALIBRATION_STORAGE_KEY,
-  GLOBAL_RISK_STORAGE_KEY, NOMBRES_SIMBOLOS, MERCADOS_ESTABLES, TEMAS,
+  GLOBAL_RISK_STORAGE_KEY, ORDER_AUDIT_STORAGE_KEY, NOMBRES_SIMBOLOS, MERCADOS_ESTABLES, TEMAS,
 } from './config.js';
 import { obtenerCuenta, obtenerWsUrl } from './services/derivApi.js';
 import { obtenerTicksHistoricos } from './services/historicalDataService.js';
@@ -18,6 +18,7 @@ import {
 import { createSimulationEngine } from './trading/simulationEngine.js';
 import { createAutoTrader } from './trading/autoTrader.js';
 import { createExecutionJournal } from './trading/executionJournal.js';
+import { createOrderAudit } from './trading/orderAudit.js';
 import { ejecutarOrdenDemo, extraerCostosReportados } from './trading/orderService.js';
 import { calcularMA, calcularRSI, calcularDesviacion, evaluarSenal } from './trading/strategy.js';
 import {
@@ -55,6 +56,13 @@ let saldoReal = 10000;
 const saldosInicialesPorCuenta = { demo: null, real: null };
 let portfolioWs = null;
 const contratosDerivAbiertosPorCuenta = { demo: [], real: [] };
+const marketHealth = {};
+const productionHealth = {
+  deriv: { estado: 'warn', texto: 'Inicializando...' },
+  portfolio: { estado: 'warn', texto: 'Pendiente' },
+  mercados: { estado: 'warn', texto: 'Sin datos' },
+};
+const alertasProduccion = [];
 let positionChart = null;
 let positionChartWs = null;
 let positionChartTimer = null;
@@ -83,6 +91,7 @@ const cloudSyncReady = iniciarSincronizacionCloud([
   STRATEGY_CONFIG_STORAGE_KEY,
   MARKET_CALIBRATION_STORAGE_KEY,
   GLOBAL_RISK_STORAGE_KEY,
+  ORDER_AUDIT_STORAGE_KEY,
 ]).catch(error => {
   console.warn('La sincronización cloud no pudo iniciar:', error);
 });
@@ -274,6 +283,103 @@ const executionJournal = createExecutionJournal({
   storageKey: EXECUTION_STORAGE_KEY,
   onChange: renderRegistroEjecuciones,
 });
+
+const orderAudit = createOrderAudit({
+  storageKey: ORDER_AUDIT_STORAGE_KEY,
+  onChange: renderAuditoriaOrdenes,
+});
+
+function claseEstadoSalud(estado) {
+  if (estado === 'ok') return 'health-ok';
+  if (estado === 'error') return 'health-error';
+  return 'health-warn';
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
+}
+
+function renderProductionHealth() {
+  const contenedor = document.getElementById('production-health');
+  if (!contenedor) return;
+  const mercados = Object.values(marketHealth);
+  const ahora = Date.now();
+  const activos = mercados.filter(item => item.estado === 'ok' && ahora - item.ultimoTick < 30000).length;
+  const conProblemas = mercados.filter(item => item.estado === 'error' || ahora - (item.ultimoTick || 0) >= 30000).length;
+  const total = Object.keys(mercadosActivos).length;
+  productionHealth.mercados = total
+    ? {
+      estado: conProblemas ? 'warn' : 'ok',
+      texto: `${activos}/${total} activos${conProblemas ? ` · ${conProblemas} revisar` : ''}`,
+    }
+    : { estado: 'warn', texto: 'Sin mercados abiertos' };
+  const realAuto = modoEjecucion === 'real'
+    ? { estado: 'ok', texto: 'Automático bloqueado' }
+    : { estado: 'ok', texto: 'Real protegido' };
+  const cards = [
+    ['Deriv', productionHealth.deriv],
+    ['Mercados', productionHealth.mercados],
+    ['Portfolio', productionHealth.portfolio],
+    ['Modo real', realAuto],
+  ];
+  contenedor.innerHTML = cards.map(([label, item]) => `
+    <div class="health-card ${claseEstadoSalud(item.estado)}">
+      <small>${label}</small>
+      <b>${item.texto}</b>
+    </div>
+  `).join('');
+}
+
+function renderAlertasProduccion() {
+  const contenedor = document.getElementById('alert-list');
+  if (!contenedor) return;
+  if (!alertasProduccion.length) {
+    contenedor.innerHTML = '<div class="alert-item alert-item-info">Sin alertas recientes.</div>';
+    return;
+  }
+  contenedor.innerHTML = alertasProduccion.slice(0, 6).map(alerta => `
+    <div class="alert-item alert-item-${alerta.tipo}">
+      ${escapeHtml(alerta.mensaje)}<br><small>${new Date(alerta.fecha).toLocaleTimeString()}</small>
+    </div>
+  `).join('');
+}
+
+function emitirAlerta(mensaje, tipo = 'info', { notificacion = false } = {}) {
+  alertasProduccion.unshift({ mensaje, tipo, fecha: new Date().toISOString() });
+  alertasProduccion.splice(20);
+  renderAlertasProduccion();
+  registrarLogAuto(mensaje, tipo);
+  if (notificacion && 'Notification' in window && Notification.permission === 'granted') {
+    new Notification('CBM Trading', { body: mensaje });
+  }
+}
+
+function renderAuditoriaOrdenes(eventos = []) {
+  const contenedor = document.getElementById('order-audit-feed');
+  if (!contenedor) return;
+  if (!eventos.length) {
+    contenedor.innerHTML = '<div class="audit-item"><strong>Sin eventos auditados</strong><small>Los intentos de orden, cotizaciones, compras, errores y cierres aparecerán aquí.</small></div>';
+    return;
+  }
+  contenedor.innerHTML = eventos.slice(0, 80).map(evento => `
+    <div class="audit-item">
+      <strong>${escapeHtml(evento.etapa)} · ${escapeHtml(evento.nombre || 'Orden')}${evento.contratoId ? ` · ${escapeHtml(evento.contratoId)}` : ''}</strong>
+      <small>${new Date(evento.fecha).toLocaleString()} · ${escapeHtml(evento.modo || '—')} · ${escapeHtml(evento.origen || '—')}</small>
+      <div>${escapeHtml(evento.detalle || '')}</div>
+    </div>
+  `).join('');
+}
+
+function limpiarAuditoriaOrdenes() {
+  if (!confirm('¿Borrar la auditoría local de órdenes?')) return;
+  orderAudit.limpiar();
+  emitirAlerta('Auditoría de órdenes eliminada.', 'info');
+}
 
 function renderEstadoRiesgoGlobal() {
   const contenedor = document.getElementById('global-risk-status');
@@ -1022,6 +1128,15 @@ function cambiarModoEjecucion(modo) {
         : 'Modo simulación segura activado. No se enviarán órdenes a Deriv.',
     modoEjecucion === 'real' || modoEjecucion === 'demo' ? 'error' : 'success'
   );
+  emitirAlerta(
+    modoEjecucion === 'real'
+      ? 'Cuenta real controlada activada: automático bloqueado y confirmación fuerte habilitada.'
+      : modoEjecucion === 'demo'
+        ? 'Cuenta demo real activada.'
+        : 'Simulación segura activada.',
+    modoEjecucion === 'real' ? 'warning' : 'info',
+  );
+  if (modoEjecucion === 'real') solicitarPermisoNotificaciones();
   actualizarIndicadorModo();
   renderResumenEjecuciones(executionJournal.registros);
   actualizarSaldo();
@@ -1029,6 +1144,24 @@ function cambiarModoEjecucion(modo) {
   if (modoEjecucion === 'demo' && signalConfig.basketDemoEnabled) {
     prepararCanastaDemoAutomatica({ silencioso: true });
   }
+}
+
+function revisarSaludMercados() {
+  const ahora = Date.now();
+  Object.entries(mercadosActivos).forEach(([id, mercado]) => {
+    const estado = marketHealth[id];
+    if (!estado?.ultimoTick) return;
+    const sinTicksMs = ahora - estado.ultimoTick;
+    if (sinTicksMs > 45000 && estado.estado !== 'error') {
+      marketHealth[id] = {
+        estado: 'warn',
+        ultimoTick: estado.ultimoTick,
+        texto: `Sin ticks ${Math.round(sinTicksMs / 1000)}s`,
+      };
+      emitirAlerta(`${mercado.nombre}: sin ticks recientes. Revisando conexión.`, 'warning');
+    }
+  });
+  renderProductionHealth();
 }
 
 function abrirHistorial() {
@@ -1098,6 +1231,7 @@ async function actualizarSaldo() {
     const data = await obtenerCuenta(modoEjecucion === 'real' ? 'real' : 'demo');
     const el = document.getElementById('balance-value');
     if (data.accountId) {
+      productionHealth.deriv = { estado: 'ok', texto: `${data.accountId} conectado` };
       const cuentaActual = modoEjecucion === 'real' ? 'real' : 'demo';
       saldoReal = parseFloat(data.balance);
       riskManager.setSaldo(saldoReal);
@@ -1107,9 +1241,14 @@ async function actualizarSaldo() {
       actualizarStatsBalance();
     } else {
       el.textContent = 'No disponible';
+      productionHealth.deriv = { estado: 'warn', texto: 'Cuenta no disponible' };
     }
   } catch (e) {
     document.getElementById('balance-value').textContent = 'Error';
+    productionHealth.deriv = { estado: 'error', texto: 'Error de conexión' };
+    emitirAlerta(`Deriv: ${mensajeAmigableError(e)}`, 'error');
+  } finally {
+    renderProductionHealth();
   }
 }
 
@@ -1157,11 +1296,27 @@ function actualizarTarjetaPosicion(c) {
       id => String(id) !== String(c.contract_id),
     );
     const costos = extraerCostosReportados(c);
-    executionJournal.cerrar(c.contract_id, {
+    const cerrado = executionJournal.cerrar(c.contract_id, {
       pnlNeto: c.profit,
       costos,
       pnlBruto: costos === null ? null : Number(c.profit) + costos,
     });
+    if (cerrado) {
+      orderAudit.registrar({
+        etapa: 'cierre detectado',
+        nivel: Number(c.profit) >= 0 ? 'success' : 'error',
+        modo: cuentaActual,
+        contratoId: c.contract_id,
+        mercadoId: c.underlying || c.symbol,
+        detalle: `Contrato cerrado con P&L ${Number(c.profit) >= 0 ? '+' : ''}$${Number(c.profit || 0).toFixed(2)}.`,
+        datos: { profit: c.profit, costos },
+      });
+      emitirAlerta(
+        `Contrato ${c.contract_id} cerrado: ${Number(c.profit) >= 0 ? '+' : ''}$${Number(c.profit || 0).toFixed(2)}.`,
+        Number(c.profit) >= 0 ? 'success' : 'error',
+        { notificacion: true },
+      );
+    }
     renderResumenEjecuciones(executionJournal.registros);
   }
   if (!el) return;
@@ -1249,16 +1404,21 @@ async function cargarPortfolio({ manual = false } = {}) {
       onOpen: ws => solicitarPortfolio(ws),
       onMessage: msg => {
       if (msg.error) {
+        productionHealth.portfolio = { estado: 'error', texto: mensajeAmigableError(msg.error.message) };
+        renderProductionHealth();
         if (pendientesConsultados.has(String(msg.echo_req?.contract_id))) {
           pendientesConsultados.delete(String(msg.echo_req.contract_id));
           return;
         }
         contenedor.innerHTML = `<div class="positions-empty">Error: ${mensajeAmigableError(msg.error.message)}</div>`;
+        emitirAlerta(`Portfolio: ${mensajeAmigableError(msg.error.message)}`, 'error');
         return;
       }
 
       if (msg.portfolio) {
         const contratos = msg.portfolio.contracts || [];
+        productionHealth.portfolio = { estado: 'ok', texto: `${contratos.length} abiertas` };
+        renderProductionHealth();
         contratosDerivAbiertosPorCuenta[cuentaActual] = contratos.map(c => c.contract_id);
         renderResumenEjecuciones(executionJournal.registros);
         renderEstadoRiesgoGlobal();
@@ -1303,10 +1463,22 @@ async function cargarPortfolio({ manual = false } = {}) {
       }
       },
       onError: () => {
+        productionHealth.portfolio = { estado: 'error', texto: 'Error de conexión' };
+        renderProductionHealth();
+        emitirAlerta('Portfolio: error de conexión con Deriv.', 'error');
         contenedor.innerHTML = '<div class="positions-empty">Error de conexión con Deriv.</div>';
+      },
+      onClose: () => {
+        if (productionHealth.portfolio.estado !== 'error') {
+          productionHealth.portfolio = { estado: 'warn', texto: 'Conexión cerrada' };
+          renderProductionHealth();
+        }
       },
     });
   } catch (error) {
+    productionHealth.portfolio = { estado: 'error', texto: mensajeAmigableError(error) };
+    renderProductionHealth();
+    emitirAlerta(`Portfolio: ${mensajeAmigableError(error)}`, 'error');
     contenedor.innerHTML = `<div class="positions-empty">Error en ${etiquetaCuenta}: ${mensajeAmigableError(error)}</div>`;
   } finally {
     if (boton) {
@@ -1379,10 +1551,37 @@ function cerrarPosicionSimulada(id) {
 
 function cerrarPosicion(contractId) {
   if (!portfolioWs || portfolioWs.readyState !== WebSocket.OPEN) {
+    emitirAlerta('Reconectando portfolio, intenta cerrar la operación en un momento.', 'warning');
     alert('Reconectando, intenta de nuevo en un momento.');
     return;
   }
+  orderAudit.registrar({
+    etapa: 'cierre solicitado',
+    nivel: 'warning',
+    modo: modoEjecucion === 'real' ? 'real' : 'demo',
+    contratoId: contractId,
+    detalle: 'Solicitud manual de cierre enviada a Deriv.',
+  });
+  emitirAlerta(`Cierre solicitado para contrato ${contractId}.`, 'warning');
   cerrarContrato(portfolioWs, contractId);
+}
+
+function confirmarOperacionReal({ nombre, tipo, stake, objetivos, entrada, sl, tp, cotizacion }) {
+  const frase = `REAL ${stake.toFixed(2)}`;
+  const detalle =
+    `CONFIRMACIÓN DE DINERO REAL\n\n`
+    + `Mercado: ${nombre}\n`
+    + `Tipo: ${tipo}\n`
+    + `Inversión: $${stake.toFixed(2)}\n`
+    + `Precio cotizado: $${cotizacion.precioCotizado?.toFixed(2) ?? '—'}\n`
+    + `Multiplicador aceptado: x${cotizacion.multiplicador ?? '—'}\n`
+    + `Riesgo máximo: $${objetivos.riesgo.toFixed(2)}\n`
+    + `Objetivo de ganancia: $${objetivos.objetivo.toFixed(2)}\n`
+    + `Entrada: ${entrada.toFixed(2)}\n`
+    + `Stop Loss: ${sl.toFixed(2)}\n`
+    + `Take Profit: ${tp.toFixed(2)}\n\n`
+    + `Para enviar esta orden escribe exactamente: ${frase}`;
+  return prompt(detalle) === frase;
 }
 
 async function ejecutarOperacion(mercadoId, tipo, entrada, sl, tp, btnId) {
@@ -1403,12 +1602,40 @@ async function ejecutarOperacion(mercadoId, tipo, entrada, sl, tp, btnId) {
   const btn = document.getElementById(btnId);
   if (btn) { btn.disabled = true; btn.textContent = 'Cotizando...'; }
   const accountMode = modoEjecucion === 'real' ? 'real' : 'demo';
+  orderAudit.registrar({
+    etapa: 'intento manual',
+    nivel: accountMode === 'real' ? 'warning' : 'info',
+    modo: accountMode,
+    mercadoId,
+    nombre,
+    tipo,
+    origen: 'manual',
+    stake,
+    riesgo: objetivos.riesgo,
+    objetivo: objetivos.objetivo,
+    detalle: `Preparando orden manual en ${etiquetaModoOperacion()}.`,
+    datos: { entrada, sl, tp },
+  });
 
   try {
     const resultado = await ejecutarOrdenDemo({
       mercadoId, tipo, stake, entrada, sl, tp, accountMode,
     }, {
       confirmarCotizacion: cotizacion => {
+        orderAudit.registrar({
+          etapa: 'cotización recibida',
+          nivel: accountMode === 'real' ? 'warning' : 'info',
+          modo: accountMode,
+          mercadoId,
+          nombre,
+          tipo,
+          origen: 'manual',
+          stake,
+          riesgo: objetivos.riesgo,
+          objetivo: objetivos.objetivo,
+          detalle: `Cotización recibida: $${cotizacion.precioCotizado?.toFixed(2) ?? '—'} · x${cotizacion.multiplicador ?? '—'}.`,
+          datos: cotizacion,
+        });
         const detalle =
         `Confirmar operación en ${etiquetaModoOperacion()}:\n\n`
         + `Mercado: ${nombre}\n`
@@ -1426,11 +1653,40 @@ async function ejecutarOperacion(mercadoId, tipo, entrada, sl, tp, btnId) {
           ? 'Para enviar dinero real escribe REAL en la siguiente ventana.'
           : '¿Ejecutar esta operación ahora?');
         if (modoEjecucion !== 'real') return confirm(detalle);
-        return prompt(detalle) === 'REAL';
+        return confirmarOperacionReal({ nombre, tipo, stake, objetivos, entrada, sl, tp, cotizacion });
       },
     });
-      if (resultado.cancelada) return;
+      if (resultado.cancelada) {
+        orderAudit.registrar({
+          etapa: 'orden cancelada',
+          nivel: 'info',
+          modo: accountMode,
+          mercadoId,
+          nombre,
+          tipo,
+          origen: 'manual',
+          stake,
+          detalle: 'La cotización fue cancelada antes de comprar.',
+          datos: resultado.cotizacion,
+        });
+        return false;
+      }
       const { compra, multiplicador, cotizacion } = resultado;
+      orderAudit.registrar({
+        etapa: 'compra aceptada',
+        nivel: accountMode === 'real' ? 'warning' : 'success',
+        modo: accountMode,
+        mercadoId,
+        nombre,
+        tipo,
+        origen: 'manual',
+        contratoId: compra.contract_id,
+        stake,
+        riesgo: objetivos.riesgo,
+        objetivo: objetivos.objetivo,
+        detalle: `Orden aceptada por Deriv. Compra $${compra.buy_price}. Saldo posterior $${compra.balance_after}.`,
+        datos: { compra, cotizacion, multiplicador },
+      });
       executionJournal.abrir({
         id: compra.contract_id,
         mercadoId,
@@ -1446,11 +1702,28 @@ async function ejecutarOperacion(mercadoId, tipo, entrada, sl, tp, btnId) {
         stopLossAmount: objetivos.riesgo,
         takeProfitAmount: objetivos.objetivo,
       });
+      emitirAlerta(
+        `${nombre} ${tipo} ejecutado en ${etiquetaModoOperacion()} · contrato ${compra.contract_id}.`,
+        accountMode === 'real' ? 'warning' : 'success',
+        { notificacion: true },
+      );
       alert(`✅ Operación ejecutada en ${etiquetaModoOperacion()}\n\nContrato: ${compra.contract_id}\nPrecio compra: $${compra.buy_price}\nMultiplicador: x${multiplicador}\nSaldo restante: $${compra.balance_after}`);
       actualizarSaldo();
       cargarPortfolio();
       return true;
   } catch (error) {
+    orderAudit.registrar({
+      etapa: 'error de orden',
+      nivel: 'error',
+      modo: accountMode,
+      mercadoId,
+      nombre,
+      tipo,
+      origen: 'manual',
+      stake,
+      detalle: mensajeAmigableError(error),
+    });
+    emitirAlerta(`${nombre} ${tipo}: ${mensajeAmigableError(error)}`, 'error', { notificacion: true });
     alert(`❌ Error: ${mensajeAmigableError(error)}`);
     return false;
   } finally {
@@ -1475,12 +1748,41 @@ async function ejecutarOperacionAutomaticaCore(mercadoId, tipo, entrada, sl, tp,
     return true;
   }
 
+  orderAudit.registrar({
+    etapa: 'intento automático',
+    nivel: 'info',
+    modo: 'demo',
+    mercadoId,
+    nombre,
+    tipo,
+    origen: opciones.tipoEjecucion === 'canasta_3x' ? 'canasta_3x' : 'automatica',
+    stake,
+    riesgo: objetivos.riesgo,
+    objetivo: objetivos.objetivo,
+    detalle: 'Preparando orden automática en cuenta demo.',
+    datos: { entrada, sl, tp },
+  });
   registrarLogAuto(`${nombre} ${tipo}: solicitando cotización ($${stake.toFixed(2)})...`, 'info');
 
   try {
     const { compra, multiplicador, cotizacion } = await ejecutarOrdenDemo({
       mercadoId, tipo, stake, entrada, sl, tp,
     });
+      orderAudit.registrar({
+        etapa: 'compra aceptada',
+        nivel: 'success',
+        modo: 'demo',
+        mercadoId,
+        nombre,
+        tipo,
+        origen: opciones.tipoEjecucion === 'canasta_3x' ? 'canasta_3x' : 'automatica',
+        contratoId: compra.contract_id,
+        stake,
+        riesgo: objetivos.riesgo,
+        objetivo: objetivos.objetivo,
+        detalle: `Orden automática aceptada. Compra $${compra.buy_price}. Saldo posterior $${compra.balance_after}.`,
+        datos: { compra, cotizacion, multiplicador },
+      });
       executionJournal.abrir({
         id: compra.contract_id,
         mercadoId,
@@ -1499,10 +1801,23 @@ async function ejecutarOperacionAutomaticaCore(mercadoId, tipo, entrada, sl, tp,
       });
       const etiquetaTipo = opciones.tipoEjecucion === 'canasta_3x' ? 'Canasta 3x demo' : 'Automático';
       registrarLogAuto(`✅ ${etiquetaTipo}: ${nombre} ${tipo} ejecutado — contrato ${compra.contract_id} | $${stake.toFixed(2)} | x${multiplicador} | saldo: $${compra.balance_after}`, 'success');
+      emitirAlerta(`${etiquetaTipo}: ${nombre} ${tipo} ejecutado · contrato ${compra.contract_id}.`, 'success', { notificacion: true });
       actualizarSaldo();
       cargarPortfolio();
       return true;
   } catch (error) {
+    orderAudit.registrar({
+      etapa: 'error automático',
+      nivel: 'error',
+      modo: 'demo',
+      mercadoId,
+      nombre,
+      tipo,
+      origen: opciones.tipoEjecucion === 'canasta_3x' ? 'canasta_3x' : 'automatica',
+      stake,
+      detalle: mensajeAmigableError(error),
+    });
+    emitirAlerta(`${nombre} ${tipo}: automático falló. ${mensajeAmigableError(error)}`, 'error', { notificacion: true });
     registrarLogAuto(`❌ ${nombre} ${tipo}: ${mensajeAmigableError(error)}`, 'error');
     throw error;
   }
@@ -1801,6 +2116,8 @@ async function agregarMercado(mercadoId = null, opciones = {}) {
     const signalTrigger = createSignalTrigger();
     const ws = crearWebSocket(wsUrl, {
       onOpen: socket => {
+      marketHealth[id] = { estado: 'warn', ultimoTick: 0, texto: 'Conectado, esperando ticks' };
+      renderProductionHealth();
       suscribirTicks(socket, simbolo);
       const el = document.getElementById(`card-${id}`);
       if (el) el.querySelector('.signal-container').innerHTML =
@@ -1812,6 +2129,9 @@ async function agregarMercado(mercadoId = null, opciones = {}) {
       },
       onMessage: msg => {
       if (msg.error) {
+        marketHealth[id] = { estado: 'error', ultimoTick: Date.now(), texto: mensajeAmigableError(msg.error.message) };
+        renderProductionHealth();
+        emitirAlerta(`${nombre}: ${mensajeAmigableError(msg.error.message)}`, 'error');
         const el = document.getElementById(`card-${id}`);
         if (el) el.querySelector('.signal-container').innerHTML =
           `<div class="signal signal-sell">Error: ${mensajeAmigableError(msg.error.message)}</div>`;
@@ -1819,6 +2139,8 @@ async function agregarMercado(mercadoId = null, opciones = {}) {
       }
       if (msg.tick) {
         const precio = msg.tick.quote;
+        marketHealth[id] = { estado: 'ok', ultimoTick: Date.now(), texto: 'Ticks en vivo' };
+        renderProductionHealth();
         const epoch = msg.tick.epoch;
         const hora = new Date(epoch * 1000).toLocaleTimeString();
         const tiempoVela = Math.floor(epoch / INTERVALO_VELA) * INTERVALO_VELA;
@@ -1998,6 +2320,9 @@ async function agregarMercado(mercadoId = null, opciones = {}) {
       }
       },
       onError: () => {
+      marketHealth[id] = { estado: 'error', ultimoTick: Date.now(), texto: 'Error de conexión' };
+      renderProductionHealth();
+      emitirAlerta(`${nombre}: error de conexión. Refrescando mercado.`, 'error');
       const el = document.getElementById(`card-${id}`);
       if (el) el.querySelector('.signal-container').innerHTML =
         '<div class="signal signal-sell">Error de conexión con Deriv. Refrescando mercado...</div>';
@@ -2007,7 +2332,12 @@ async function agregarMercado(mercadoId = null, opciones = {}) {
       }
       programarRefrescoMercado(id);
       },
-      onClose: () => programarRefrescoMercado(id),
+      onClose: () => {
+        if (!mercadosActivos[id]) return;
+        marketHealth[id] = { estado: 'warn', ultimoTick: marketHealth[id]?.ultimoTick || Date.now(), texto: 'Reconectando' };
+        renderProductionHealth();
+        programarRefrescoMercado(id);
+      },
     });
 
     mercadosActivos[id] = {
@@ -2060,15 +2390,18 @@ function programarRefrescoMercado(id) {
 function quitarMercado(id) {
   if (mercadosActivos[id]) {
     if (mercadosActivos[id].reconnectTimer) clearTimeout(mercadosActivos[id].reconnectTimer);
+    mercadosActivos[id].removidoManual = true;
     mercadosActivos[id].ws.close();
     mercadosActivos[id].chart.remove();
     delete mercadosActivos[id];
   }
   autoTrader.eliminar(id);
   delete estadosAutomaticos[id];
+  delete marketHealth[id];
   const el = document.getElementById(`card-${id}`);
   if (el) el.remove();
   renderRankingMercados();
+  renderProductionHealth();
   if (Object.keys(mercadosActivos).length === 0) {
     document.getElementById('empty').style.display = 'block';
   }
@@ -2104,6 +2437,7 @@ Object.assign(window, {
   cambiarFiltroEjecuciones,
   cambiarFiltroHistorial,
   limpiarRegistroEjecuciones,
+  limpiarAuditoriaOrdenes,
   alternarRegistroEjecuciones,
   cerrarEjecuciones,
   cerrarEjecucionesClick,
@@ -2139,9 +2473,13 @@ async function iniciarApp() {
   cargarHistorialGuardado();
   renderResumenEjecuciones([]);
   executionJournal.cargar();
+  orderAudit.cargar();
   simulationEngine.cargar();
   actualizarSaldo();
   setInterval(actualizarSaldo, 30000);
+  setInterval(revisarSaludMercados, 15000);
+  renderProductionHealth();
+  renderAlertasProduccion();
   renderHistorial();
   cargarPortfolio();
   actualizarRankingAutomatico();

@@ -72,6 +72,22 @@ body { background: var(--bg-page); color: var(--text-primary); transition: backg
 .summary-stat { background: var(--bg-stat); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 9px 10px; text-align: center; }
 .summary-stat-label { font-size: 10px; color: var(--text-faint); }
 .summary-stat-value { font-size: 17px; font-weight: 600; margin-top: 2px; }
+.production-panel { margin-top: 4px; display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(280px, .7fr); gap: 10px; }
+.health-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(135px, 1fr)); gap: 8px; }
+.health-card { background: var(--bg-stat); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 9px 10px; }
+.health-card small { display: block; color: var(--text-faint); font-size: 10px; }
+.health-card b { display: block; margin-top: 3px; font-size: 13px; color: var(--text-primary); }
+.health-ok b { color: var(--accent); }
+.health-warn b { color: var(--warning); }
+.health-error b { color: var(--danger); }
+.alert-panel { background: var(--bg-stat); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 9px 10px; }
+.alert-panel-title { font-size: 10px; color: var(--text-faint); margin-bottom: 6px; }
+.alert-list { display: flex; flex-direction: column; gap: 5px; max-height: 94px; overflow-y: auto; }
+.alert-item { font-size: 11px; line-height: 1.25; color: var(--text-secondary); border-left: 3px solid var(--border); padding-left: 7px; }
+.alert-item-success { border-color: var(--accent); }
+.alert-item-error { border-color: var(--danger); }
+.alert-item-warning { border-color: var(--warning); }
+.alert-item-info { border-color: var(--blue); }
 
 .config-row { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; padding-top: 2px; }
 .config-group { display: flex; flex-direction: column; gap: 4px; }
@@ -116,6 +132,10 @@ body { background: var(--bg-page); color: var(--text-primary); transition: backg
 .cooldown-input { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-secondary); }
 .cooldown-input input { width: 70px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; background: var(--bg-stat); color: var(--text-primary); }
 .execution-notice { font-size: 11px; color: var(--text-secondary); margin-bottom: 10px; min-height: 16px; }
+.audit-feed { margin-top: 12px; display: grid; gap: 6px; max-height: 180px; overflow-y: auto; }
+.audit-item { border: 1px solid var(--border); border-radius: 8px; background: var(--bg-stat); padding: 8px 10px; font-size: 11px; color: var(--text-secondary); }
+.audit-item strong { display: block; color: var(--text-primary); font-size: 12px; margin-bottom: 2px; }
+.audit-item small { color: var(--text-faint); }
 .execution-details { display: none; }
 .execution-details.open { display: block; }
 .market-ranking-section { padding: 16px 18px 0; scroll-margin-top: 90px; }
@@ -266,6 +286,7 @@ table.history-table tr:last-child td { border-bottom: none; }
   .side-link { white-space: nowrap; }
   .sidebar-footer { display: none; }
   .header { top: 61px; }
+  .production-panel { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 680px) {
@@ -355,6 +376,20 @@ table.history-table tr:last-child td { border-bottom: none; }
     <div class="summary-stat">
       <div class="summary-stat-label">Pérdida acumulada</div>
       <div class="summary-stat-value" id="hist-loss-amount" style="color:#ef5350">$0.00</div>
+    </div>
+  </div>
+  <div class="production-panel">
+    <div class="health-grid" id="production-health">
+      <div class="health-card health-warn"><small>Deriv</small><b>Inicializando...</b></div>
+      <div class="health-card health-warn"><small>Mercados</small><b>Sin datos</b></div>
+      <div class="health-card health-warn"><small>Portfolio</small><b>Pendiente</b></div>
+      <div class="health-card health-warn"><small>Modo real</small><b>Bloqueado automático</b></div>
+    </div>
+    <div class="alert-panel">
+      <div class="alert-panel-title">Alertas recientes</div>
+      <div class="alert-list" id="alert-list">
+        <div class="alert-item alert-item-info">La app está lista para monitorear eventos importantes.</div>
+      </div>
     </div>
   </div>
 
@@ -491,6 +526,13 @@ table.history-table tr:last-child td { border-bottom: none; }
           <tbody id="execution-body"></tbody>
         </table>
         <div class="history-empty" id="execution-empty">Todavía no hay ejecuciones registradas.</div>
+      </div>
+      <div class="backtest-section-title">Auditoría de órdenes</div>
+      <div class="cooldown-input" style="justify-content:flex-end;margin-bottom:8px">
+        <button class="btn-clear" onclick="limpiarAuditoriaOrdenes()">Limpiar auditoría</button>
+      </div>
+      <div class="audit-feed" id="order-audit-feed">
+        <div class="audit-item"><strong>Sin eventos auditados</strong><small>Los intentos de orden, cotizaciones, compras, errores y cierres aparecerán aquí.</small></div>
       </div>
     </div>
   </div>

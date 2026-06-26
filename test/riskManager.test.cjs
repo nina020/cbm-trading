@@ -33,6 +33,7 @@ async function cargarModulo(rutaInicial) {
 const riskManager = cargarModulo(path.join(__dirname, '../trading/riskManager.js'));
 const strategyRules = cargarModulo(path.join(__dirname, '../trading/strategyRules.js'));
 const basketTrader = cargarModulo(path.join(__dirname, '../trading/basketTrader.js'));
+const orderAudit = cargarModulo(path.join(__dirname, '../trading/orderAudit.js'));
 
 const operacionBuy = {
   tipo: 'BUY',
@@ -314,6 +315,37 @@ test('el registro separa P&L bruto, costos y neto sin inventar comisiones', asyn
   assert.equal(journal.registros[0].costos, 0.5);
   assert.equal(journal.registros[0].pnlBruto, 5.5);
   assert.equal(journal.registros[0].pnl, 5);
+});
+
+test('la auditoría de órdenes guarda eventos y respeta el límite configurado', async () => {
+  const { createOrderAudit } = await orderAudit;
+  const memoria = new Map();
+  const storage = {
+    getItem: key => memoria.get(key) || null,
+    setItem: (key, value) => memoria.set(key, value),
+    removeItem: key => memoria.delete(key),
+  };
+  const cambios = [];
+  const audit = createOrderAudit({
+    storageKey: 'audit',
+    storage,
+    limit: 2,
+    onChange: eventos => cambios.push(eventos.length),
+  });
+
+  audit.cargar();
+  audit.registrar({ etapa: 'intento', mercadoId: 'R_10', modo: 'demo', detalle: 'uno' });
+  audit.registrar({ etapa: 'cotización', mercadoId: 'R_10', modo: 'demo', detalle: 'dos' });
+  audit.registrar({ etapa: 'compra', mercadoId: 'R_10', modo: 'demo', detalle: 'tres' });
+
+  assert.equal(audit.eventos.length, 3);
+  assert.equal(JSON.parse(memoria.get('audit')).length, 2);
+  assert.equal(audit.eventos[0].etapa, 'compra');
+  assert.deepEqual(cambios, [0, 1, 2, 3]);
+
+  audit.limpiar();
+  assert.equal(audit.eventos.length, 0);
+  assert.equal(memoria.has('audit'), false);
 });
 
 test('la configuración de señales aplica límites seguros', async () => {
