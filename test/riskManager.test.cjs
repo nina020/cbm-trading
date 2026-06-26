@@ -268,6 +268,83 @@ test('la cotización conserva multiplicador y solo suma costos explícitos', asy
   assert.equal(extraerCostosReportados({ fee: -0.2 }), 0.2);
 });
 
+test('la orden ignora propuestas duplicadas y confirma una sola vez', async () => {
+  const fetchOriginal = globalThis.fetch;
+  const webSocketOriginal = globalThis.WebSocket;
+  let confirmaciones = 0;
+  let compras = 0;
+
+  globalThis.fetch = async () => ({
+    ok: true,
+    json: async () => ({ url: 'wss://deriv.test' }),
+  });
+  globalThis.WebSocket = class FakeWebSocket {
+    constructor() {
+      setTimeout(() => this.onopen?.({}), 0);
+    }
+
+    send(mensaje) {
+      const data = JSON.parse(mensaje);
+      if (data.proposal) {
+        setTimeout(() => {
+          this.onmessage?.({
+            data: JSON.stringify({
+              msg_type: 'proposal',
+              proposal: { id: 'proposal-1', ask_price: 1, spot: 100, multiplier: 100 },
+            }),
+          });
+          this.onmessage?.({
+            data: JSON.stringify({
+              msg_type: 'proposal',
+              proposal: { id: 'proposal-2', ask_price: 1, spot: 100, multiplier: 100 },
+            }),
+          });
+        }, 0);
+      }
+      if (data.buy) {
+        compras++;
+        setTimeout(() => {
+          this.onmessage?.({
+            data: JSON.stringify({
+              msg_type: 'buy',
+              buy: { contract_id: 123, buy_price: 1, balance_after: 99 },
+            }),
+          });
+        }, 0);
+      }
+    }
+
+    close() {}
+  };
+
+  try {
+    const { ejecutarOrdenDemo } = await cargarModulo(
+      path.join(__dirname, '../trading/orderService.js'),
+    );
+    const resultado = await ejecutarOrdenDemo({
+      mercadoId: 'R_10',
+      tipo: 'BUY',
+      stake: 1,
+      entrada: 100,
+      sl: 99,
+      tp: 101,
+      accountMode: 'real',
+    }, {
+      confirmarCotizacion: () => {
+        confirmaciones++;
+        return true;
+      },
+    });
+
+    assert.equal(confirmaciones, 1);
+    assert.equal(compras, 1);
+    assert.equal(resultado.compra.contract_id, 123);
+  } finally {
+    globalThis.fetch = fetchOriginal;
+    globalThis.WebSocket = webSocketOriginal;
+  }
+});
+
 test('el registro separa P&L bruto, costos y neto sin inventar comisiones', async () => {
   const { createExecutionJournal } = await cargarModulo(
     path.join(__dirname, '../trading/executionJournal.js'),

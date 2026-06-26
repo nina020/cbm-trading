@@ -1706,10 +1706,14 @@ async function ejecutarOperacion(mercadoId, tipo, entrada, sl, tp, btnId) {
   });
 
   try {
+    let cotizacionAceptada = false;
+    let cotizacionRechazada = false;
     const resultado = await ejecutarOrdenDemo({
       mercadoId, tipo, stake, entrada, sl, tp, accountMode,
     }, {
       confirmarCotizacion: cotizacion => {
+        if (cotizacionAceptada) return true;
+        if (cotizacionRechazada) return false;
         orderAudit.registrar({
           etapa: 'cotización recibida',
           nivel: accountMode === 'real' ? 'warning' : 'info',
@@ -1740,14 +1744,18 @@ async function ejecutarOperacion(mercadoId, tipo, entrada, sl, tp, btnId) {
         + (modoEjecucion === 'real'
           ? 'Para enviar dinero real escribe REAL en la siguiente ventana.'
           : '¿Ejecutar esta operación ahora?');
-        if (modoEjecucion !== 'real') return confirm(detalle);
-        return confirmarOperacionReal({ nombre, tipo, stake, objetivos, entrada, sl, tp, cotizacion });
+        const aceptada = modoEjecucion !== 'real'
+          ? confirm(detalle)
+          : confirmarOperacionReal({ nombre, tipo, stake, objetivos, entrada, sl, tp, cotizacion });
+        cotizacionAceptada = aceptada;
+        cotizacionRechazada = !aceptada;
+        return aceptada;
       },
     });
       if (resultado.cancelada) {
         orderAudit.registrar({
           etapa: 'orden cancelada',
-          nivel: 'info',
+          nivel: accountMode === 'real' ? 'warning' : 'info',
           modo: accountMode,
           mercadoId,
           nombre,
@@ -1757,6 +1765,10 @@ async function ejecutarOperacion(mercadoId, tipo, entrada, sl, tp, btnId) {
           detalle: 'La cotización fue cancelada antes de comprar.',
           datos: resultado.cotizacion,
         });
+        if (accountMode === 'real') {
+          emitirAlerta('Orden real cancelada: la confirmación no coincidió o fue cerrada antes de comprar.', 'warning');
+          alert('Orden real cancelada. No se envió dinero real porque la confirmación no coincidió o fue cerrada.');
+        }
         return false;
       }
       const { compra, multiplicador, cotizacion } = resultado;

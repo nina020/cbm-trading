@@ -86,6 +86,7 @@ async function procesarOrden({
     let multiplicador = MULTIPLICADOR_DEFAULT;
     let reintentoMultiplicador = false;
     let cotizacion = null;
+    let compraSolicitada = false;
     const limitesMinimos = {};
     const limitesReintentados = new Set();
 
@@ -126,6 +127,7 @@ async function procesarOrden({
         }
 
         if (msg.msg_type === 'proposal' && msg.proposal) {
+          if (compraSolicitada) return;
           cotizacion = normalizarCotizacion(msg.proposal, multiplicador);
           if (comprar) {
             if (confirmarCotizacion && !confirmarCotizacion(cotizacion)) {
@@ -133,6 +135,7 @@ async function procesarOrden({
               resolve({ cancelada: true, cotizacion, multiplicador });
               return;
             }
+            compraSolicitada = true;
             comprarProposal(ws, msg.proposal.id, Number(msg.proposal.ask_price));
             return;
           }
