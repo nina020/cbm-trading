@@ -54,6 +54,7 @@ let historialId = 0;
 let modoEjecucion = 'simulacion';
 const REAL_CONTROLADO_MAX_STAKE = 2;
 const FEE_REVIEW_INTERVAL_SECONDS = 30 * 60;
+const MARKET_RANKING_REFRESH_MS = 2 * 60 * 1000;
 let saldoReal = 10000;
 const saldosInicialesPorCuenta = { demo: null, real: null };
 let portfolioWs = null;
@@ -1478,19 +1479,25 @@ async function cargarPortfolio({ manual = false } = {}) {
 
   try {
     const wsUrl = await obtenerWsUrl(cuentaActual);
-    if (portfolioWs) portfolioWs.close();
+    if (portfolioWs) {
+      portfolioWs.cierreEsperado = true;
+      portfolioWs.close();
+    }
     const cierresDetectados = [];
     const pendientesConsultados = new Set();
     portfolioWs = crearWebSocket(wsUrl, {
       onOpen: ws => solicitarPortfolio(ws),
       onMessage: msg => {
       if (msg.error) {
-        productionHealth.portfolio = { estado: 'error', texto: mensajeAmigableError(msg.error.message) };
-        renderProductionHealth();
         if (pendientesConsultados.has(String(msg.echo_req?.contract_id))) {
           pendientesConsultados.delete(String(msg.echo_req.contract_id));
+          if (manual && pendientesConsultados.size === 0) {
+            registrarLogAuto('Reconciliación Deriv completa: algunos contratos pendientes ya no están abiertos.', 'info');
+          }
           return;
         }
+        productionHealth.portfolio = { estado: 'error', texto: mensajeAmigableError(msg.error.message) };
+        renderProductionHealth();
         contenedor.innerHTML = `<div class="positions-empty">Error: ${mensajeAmigableError(msg.error.message)}</div>`;
         emitirAlerta(`Portfolio: ${mensajeAmigableError(msg.error.message)}`, 'error');
         return;
@@ -1550,15 +1557,17 @@ async function cargarPortfolio({ manual = false } = {}) {
         actualizarSaldo();
       }
       },
-      onError: () => {
+      onError: (_event, ws) => {
+        if (ws?.cierreEsperado) return;
         productionHealth.portfolio = { estado: 'error', texto: 'Error de conexión' };
         renderProductionHealth();
         emitirAlerta('Portfolio: error de conexión con Deriv.', 'error');
         contenedor.innerHTML = '<div class="positions-empty">Error de conexión con Deriv.</div>';
       },
-      onClose: () => {
+      onClose: (_event, ws) => {
+        if (ws?.cierreEsperado) return;
         if (productionHealth.portfolio.estado !== 'error') {
-          productionHealth.portfolio = { estado: 'warn', texto: 'Conexión cerrada' };
+          productionHealth.portfolio = { estado: 'ok', texto: 'Actualizado' };
           renderProductionHealth();
         }
       },
@@ -2584,7 +2593,7 @@ async function iniciarApp() {
   renderHistorial();
   cargarPortfolio();
   actualizarRankingAutomatico();
-  setInterval(actualizarRankingAutomatico, 300000);
+  setInterval(actualizarRankingAutomatico, MARKET_RANKING_REFRESH_MS);
 }
 
 iniciarApp().catch(error => {
