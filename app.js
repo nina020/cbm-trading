@@ -58,6 +58,7 @@ let saldoReal = 10000;
 const saldosInicialesPorCuenta = { demo: null, real: null };
 let portfolioWs = null;
 const contratosDerivAbiertosPorCuenta = { demo: [], real: [] };
+const contratosDerivMercadoPorCuenta = { demo: {}, real: {} };
 const cargosReportadosPorContrato = {};
 const marketHealth = {};
 const productionHealth = {
@@ -437,6 +438,7 @@ function reanudarOperativa() {
 
 function obtenerRegistrosParaRiesgo() {
   const cuentaActual = modoEjecucion === 'real' ? 'real' : 'demo';
+  const mercadosPorContrato = contratosDerivMercadoPorCuenta[cuentaActual] || {};
   const idsRegistrados = new Set(
     executionJournal.registros
       .filter(item => item.estado === 'pendiente')
@@ -444,14 +446,15 @@ function obtenerRegistrosParaRiesgo() {
   );
   const posicionesExternas = (contratosDerivAbiertosPorCuenta[cuentaActual] || [])
     .filter(id => !idsRegistrados.has(String(id)))
-    .map(id => ({ id, estado: 'pendiente' }));
+    .map(id => ({ id, estado: 'pendiente', mercadoId: mercadosPorContrato[String(id)] || null }));
   return [...executionJournal.registros, ...posicionesExternas];
 }
 
-function validarAperturaPorRiesgo(riesgoOperacion) {
+function validarAperturaPorRiesgo(riesgoOperacion, mercadoId = null) {
   return globalRiskManager.evaluar({
     registros: obtenerRegistrosParaRiesgo(),
     riesgoOperacion,
+    mercadoId,
   });
 }
 
@@ -1347,6 +1350,7 @@ function actualizarTarjetaPosicion(c) {
     contratosDerivAbiertosPorCuenta[cuentaActual] = contratosDerivAbiertosPorCuenta[cuentaActual].filter(
       id => String(id) !== String(c.contract_id),
     );
+    delete contratosDerivMercadoPorCuenta[cuentaActual][String(c.contract_id)];
     const costos = extraerCostosReportados(c);
     const cerrado = executionJournal.cerrar(c.contract_id, {
       pnlNeto: c.profit,
@@ -1497,6 +1501,9 @@ async function cargarPortfolio({ manual = false } = {}) {
         productionHealth.portfolio = { estado: 'ok', texto: `${contratos.length} abiertas` };
         renderProductionHealth();
         contratosDerivAbiertosPorCuenta[cuentaActual] = contratos.map(c => c.contract_id);
+        contratosDerivMercadoPorCuenta[cuentaActual] = Object.fromEntries(
+          contratos.map(c => [String(c.contract_id), c.underlying || c.symbol || parseShortcode(c.shortcode).simbolo]),
+        );
         renderResumenEjecuciones(executionJournal.registros);
         renderEstadoRiesgoGlobal();
         const pendientes = idsPendientesNoAbiertosPorCuenta(cuentaActual);
@@ -1520,6 +1527,10 @@ async function cargarPortfolio({ manual = false } = {}) {
 
       if (msg.proposal_open_contract) {
         const contrato = msg.proposal_open_contract;
+        if (contrato.underlying || contrato.symbol || contrato.shortcode) {
+          contratosDerivMercadoPorCuenta[cuentaActual][String(contrato.contract_id)] =
+            contrato.underlying || contrato.symbol || parseShortcode(contrato.shortcode).simbolo;
+        }
         if (contrato.is_sold) {
           const pnl = Number(contrato.profit) || 0;
           cierresDetectados.push({ id: contrato.contract_id, pnl });
@@ -1665,7 +1676,7 @@ async function ejecutarOperacion(mercadoId, tipo, entrada, sl, tp, btnId) {
   const stake = calcularInversionSugerida();
   const objetivos = calcularObjetivosMonetarios(stake);
   const nombre = NOMBRES_SIMBOLOS[mercadoId] || mercadoId;
-  const evaluacionRiesgo = validarAperturaPorRiesgo(objetivos.riesgo);
+  const evaluacionRiesgo = validarAperturaPorRiesgo(objetivos.riesgo, mercadoId);
   if (!evaluacionRiesgo.permitido) {
     alert(`Operación bloqueada por riesgo:\n\n${evaluacionRiesgo.motivo}`);
     renderEstadoRiesgoGlobal();
@@ -1815,7 +1826,7 @@ async function ejecutarOperacionAutomaticaCore(mercadoId, tipo, entrada, sl, tp,
   const stake = calcularInversionSugerida();
   const objetivos = calcularObjetivosMonetarios(stake);
   const nombre = NOMBRES_SIMBOLOS[mercadoId] || mercadoId;
-  const evaluacionRiesgo = validarAperturaPorRiesgo(objetivos.riesgo);
+  const evaluacionRiesgo = validarAperturaPorRiesgo(objetivos.riesgo, mercadoId);
   if (!evaluacionRiesgo.permitido) {
     renderEstadoRiesgoGlobal();
     throw new Error(`Bloqueada por riesgo: ${evaluacionRiesgo.motivo}`);

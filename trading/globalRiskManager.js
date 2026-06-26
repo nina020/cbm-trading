@@ -67,6 +67,15 @@ export function resumirRiesgoDiario(registros, ahora = Date.now()) {
   };
 }
 
+function tienePosicionAbiertaEnMercado(registros, mercadoId) {
+  if (!mercadoId) return false;
+  return registros.some(item => (
+    item.estado === 'pendiente'
+    && item.mercadoId
+    && String(item.mercadoId) === String(mercadoId)
+  ));
+}
+
 export function createGlobalRiskManager({
   storageKey,
   storage = localStorage,
@@ -100,7 +109,7 @@ export function createGlobalRiskManager({
       pausaHasta = 0;
       guardar();
     },
-    evaluar({ registros = [], riesgoOperacion = 0 } = {}) {
+    evaluar({ registros = [], riesgoOperacion = 0, mercadoId = null } = {}) {
       const ahora = getNow();
       const resumen = resumirRiesgoDiario(registros, ahora);
       const riesgo = Math.max(0, Number(riesgoOperacion) || 0);
@@ -130,6 +139,15 @@ export function createGlobalRiskManager({
           permitido: false,
           codigo: 'max_posiciones',
           motivo: `Límite de ${config.maxPosicionesAbiertas} posiciones abiertas alcanzado.`,
+          ...resumen,
+        };
+      }
+
+      if (tienePosicionAbiertaEnMercado(registros, mercadoId)) {
+        return {
+          permitido: false,
+          codigo: 'mercado_duplicado',
+          motivo: 'Ya existe una operación abierta en este mismo mercado.',
           ...resumen,
         };
       }

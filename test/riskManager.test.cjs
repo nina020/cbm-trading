@@ -1031,9 +1031,25 @@ test('el riesgo global bloquea pérdida diaria y máximo de posiciones', async (
     }],
     riesgoOperacion: 6,
   });
+  const mercadoDuplicado = manager.evaluar({
+    registros: [
+      { estado: 'pendiente', mercadoId: 'R_10' },
+    ],
+    mercadoId: 'R_10',
+    riesgoOperacion: 1,
+  });
+  const mercadoDistinto = manager.evaluar({
+    registros: [
+      { estado: 'pendiente', mercadoId: 'R_10' },
+    ],
+    mercadoId: 'R_25',
+    riesgoOperacion: 1,
+  });
 
   assert.equal(maxPosiciones.codigo, 'max_posiciones');
   assert.equal(perdidaDiaria.codigo, 'perdida_diaria');
+  assert.equal(mercadoDuplicado.codigo, 'mercado_duplicado');
+  assert.equal(mercadoDistinto.codigo, 'ok');
 });
 
 test('el riesgo global pausa después de pérdidas consecutivas y puede reanudarse', async () => {
