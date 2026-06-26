@@ -774,6 +774,16 @@ test('las posiciones priorizan límites monetarios reportados por Deriv', async 
   });
 });
 
+test('las posiciones interpretan timestamps de cierre y apertura de Deriv', async () => {
+  const { obtenerTimestampContrato } = await cargarModulo(
+    path.join(__dirname, '../components/positionCards.js'),
+  );
+
+  assert.equal(obtenerTimestampContrato({ purchase_time: 1710000000 }, ['purchase_time']), 1710000000);
+  assert.equal(obtenerTimestampContrato({ date_expiry: 1710000000000 }, ['date_expiry']), 1710000000);
+  assert.equal(obtenerTimestampContrato({ otro: 1710000000 }, ['purchase_time']), null);
+});
+
 test('las posiciones usan registro y cálculo como respaldo para SL/TP', async () => {
   const { resolverLimitesMonetarios } = await cargarModulo(
     path.join(__dirname, '../components/positionCards.js'),

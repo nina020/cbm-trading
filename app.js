@@ -34,6 +34,7 @@ import { evaluarPreparacionReal, evaluarSemanaTrading } from './trading/weeklyEv
 import { createMarketCard } from './components/marketCard.js';
 import {
   createRealPositionCard, createSimulatedPositionCard, resolverLimitesMonetarios,
+  obtenerTimestampContrato,
 } from './components/positionCards.js';
 import { renderExecutionTable } from './components/executionTable.js';
 import { renderAutoStatus } from './components/autoStatus.js';
@@ -52,10 +53,12 @@ let historial = [];
 let historialId = 0;
 let modoEjecucion = 'simulacion';
 const REAL_CONTROLADO_MAX_STAKE = 2;
+const FEE_REVIEW_INTERVAL_SECONDS = 30 * 60;
 let saldoReal = 10000;
 const saldosInicialesPorCuenta = { demo: null, real: null };
 let portfolioWs = null;
 const contratosDerivAbiertosPorCuenta = { demo: [], real: [] };
+const cargosReportadosPorContrato = {};
 const marketHealth = {};
 const productionHealth = {
   deriv: { estado: 'warn', texto: 'Inicializando...' },
@@ -1264,6 +1267,54 @@ function parseShortcode(shortcode = '') {
   return { tipo, simbolo, multiplier: multiplierMatch?.[1] || '?' };
 }
 
+function formatearDuracion(segundos) {
+  const total = Math.max(0, Math.floor(Number(segundos) || 0));
+  const horas = Math.floor(total / 3600);
+  const minutos = Math.floor((total % 3600) / 60);
+  const segs = total % 60;
+  if (horas > 0) return `${horas}h ${String(minutos).padStart(2, '0')}m`;
+  return `${minutos}m ${String(segs).padStart(2, '0')}s`;
+}
+
+function actualizarContadoresPosiciones() {
+  const ahora = Math.floor(Date.now() / 1000);
+  document.querySelectorAll('.position-card[data-open-time], .position-card[data-expiry-time]').forEach(card => {
+    const abiertaEn = Number(card.dataset.openTime);
+    const cierraEn = Number(card.dataset.expiryTime);
+    const abiertaEl = card.querySelector('.pos-open-elapsed');
+    const cierreEl = card.querySelector('.pos-expiry-countdown');
+    const revisionEl = card.querySelector('.pos-fee-review');
+
+    if (abiertaEl && Number.isFinite(abiertaEn) && abiertaEn > 0) {
+      abiertaEl.textContent = formatearDuracion(ahora - abiertaEn);
+    }
+
+    if (cierreEl) {
+      cierreEl.classList.remove('timer-warn', 'timer-danger');
+      if (Number.isFinite(cierraEn) && cierraEn > 0) {
+        const restante = cierraEn - ahora;
+        cierreEl.textContent = restante > 0 ? formatearDuracion(restante) : 'Cerrando/expirada';
+        if (restante <= 60) cierreEl.classList.add('timer-danger');
+        else if (restante <= 5 * 60) cierreEl.classList.add('timer-warn');
+      } else {
+        cierreEl.textContent = 'Sin vencimiento fijo';
+      }
+    }
+
+    if (revisionEl) {
+      revisionEl.classList.remove('timer-warn');
+      if (Number.isFinite(abiertaEn) && abiertaEn > 0) {
+        const transcurrido = ahora - abiertaEn;
+        const restanteRevision = FEE_REVIEW_INTERVAL_SECONDS - (transcurrido % FEE_REVIEW_INTERVAL_SECONDS);
+        revisionEl.textContent = formatearDuracion(restanteRevision);
+        if (restanteRevision <= 5 * 60) revisionEl.classList.add('timer-warn');
+      } else {
+        revisionEl.textContent = '—';
+      }
+    }
+  });
+}
+
 function crearTarjetaPosicion(contrato) {
   const contractId = contrato.contract_id;
   const { tipo, simbolo, multiplier } = parseShortcode(contrato.shortcode);
@@ -1286,6 +1337,7 @@ function crearTarjetaPosicion(contrato) {
     contrato, mercadoId, nombre, tipoLabel, multiplier, limites,
   });
   document.getElementById('real-positions').appendChild(div);
+  actualizarContadoresPosiciones();
 }
 
 function actualizarTarjetaPosicion(c) {
@@ -1302,6 +1354,7 @@ function actualizarTarjetaPosicion(c) {
       pnlBruto: costos === null ? null : Number(c.profit) + costos,
     });
     if (cerrado) {
+      delete cargosReportadosPorContrato[c.contract_id];
       orderAudit.registrar({
         etapa: 'cierre detectado',
         nivel: Number(c.profit) >= 0 ? 'success' : 'error',
@@ -1320,6 +1373,30 @@ function actualizarTarjetaPosicion(c) {
     renderResumenEjecuciones(executionJournal.registros);
   }
   if (!el) return;
+
+  const abiertaEn = obtenerTimestampContrato(c, [
+    'purchase_time', 'date_start', 'start_time', 'transaction_time',
+  ]);
+  const cierraEn = obtenerTimestampContrato(c, [
+    'date_expiry', 'expiry_time', 'sell_time',
+  ]);
+  if (abiertaEn) el.dataset.openTime = String(abiertaEn);
+  if (cierraEn) el.dataset.expiryTime = String(cierraEn);
+
+  const costosAbiertos = extraerCostosReportados(c);
+  if (costosAbiertos !== null && cargosReportadosPorContrato[c.contract_id] !== costosAbiertos) {
+    cargosReportadosPorContrato[c.contract_id] = costosAbiertos;
+    orderAudit.registrar({
+      etapa: 'costos reportados',
+      nivel: 'warning',
+      modo: modoEjecucion === 'real' ? 'real' : 'demo',
+      contratoId: c.contract_id,
+      mercadoId: c.underlying || c.symbol,
+      detalle: `Deriv reporta cargos/costos acumulados por $${costosAbiertos.toFixed(2)} en esta posición.`,
+      datos: { costos: costosAbiertos },
+    });
+    emitirAlerta(`Contrato ${c.contract_id}: Deriv reporta costos por $${costosAbiertos.toFixed(2)}.`, 'warning');
+  }
 
   const mercadoId = c.underlying || c.symbol;
   if (mercadoId && NOMBRES_SIMBOLOS[mercadoId]) {
@@ -2478,6 +2555,7 @@ async function iniciarApp() {
   actualizarSaldo();
   setInterval(actualizarSaldo, 30000);
   setInterval(revisarSaludMercados, 15000);
+  setInterval(actualizarContadoresPosiciones, 1000);
   renderProductionHealth();
   renderAlertasProduccion();
   renderHistorial();

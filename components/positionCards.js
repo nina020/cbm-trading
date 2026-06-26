@@ -27,6 +27,17 @@ export function resolverLimitesMonetarios({ contrato = {}, registro = null, obje
   };
 }
 
+export function obtenerTimestampContrato(contrato = {}, campos = []) {
+  for (const campo of campos) {
+    const valor = contrato[campo];
+    const numero = Number(valor);
+    if (Number.isFinite(numero) && numero > 0) {
+      return numero > 100000000000 ? Math.floor(numero / 1000) : Math.floor(numero);
+    }
+  }
+  return null;
+}
+
 function dineroLimite(value) {
   return Number.isFinite(Number(value)) ? `$${Number(value).toFixed(2)}` : '—';
 }
@@ -34,9 +45,17 @@ function dineroLimite(value) {
 export function createRealPositionCard({
   contrato, mercadoId, nombre, tipoLabel, multiplier, limites,
 }) {
+  const abiertaEn = obtenerTimestampContrato(contrato, [
+    'purchase_time', 'date_start', 'start_time', 'transaction_time',
+  ]);
+  const cierraEn = obtenerTimestampContrato(contrato, [
+    'date_expiry', 'expiry_time', 'sell_time',
+  ]);
   const div = document.createElement('div');
   div.className = 'position-card';
   div.id = `pos-${contrato.contract_id}`;
+  if (abiertaEn) div.dataset.openTime = String(abiertaEn);
+  if (cierraEn) div.dataset.expiryTime = String(cierraEn);
   div.innerHTML = `
     <div>
       <div class="pos-title"><span class="position-market-name">${nombre}</span> — ${tipoLabel} (x${multiplier})</div>
@@ -44,6 +63,11 @@ export function createRealPositionCard({
       <div class="pos-limits">
         <span>Stop Loss <b class="pos-sl-amount">${dineroLimite(limites.stopLossAmount)}</b></span>
         <span>Take Profit <b class="pos-tp-amount">${dineroLimite(limites.takeProfitAmount)}</b></span>
+      </div>
+      <div class="pos-timers">
+        <span>Abierta hace <b class="pos-open-elapsed">—</b></span>
+        <span>Cierre Deriv <b class="pos-expiry-countdown">Sin vencimiento fijo</b></span>
+        <span>Revisión cargos <b class="pos-fee-review">—</b></span>
       </div>
     </div>
     <div class="pos-pnl-box">
