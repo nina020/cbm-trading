@@ -658,6 +658,32 @@ table.history-table tr:last-child td { border-bottom: none; }
       <input type="checkbox" id="signal-filter-auto">
       Aplicar este filtro a las ejecuciones automáticas
     </label>
+    <div class="backtest-section-title">Canasta inteligente 3x demo</div>
+    <label class="auto-toggle-label" style="margin-bottom:12px">
+      <input type="checkbox" id="basket-demo-enabled">
+      Activar canasta 3x solo en cuenta demo real
+    </label>
+    <div class="risk-limits-grid" style="display:grid;grid-template-columns:repeat(2,minmax(180px,1fr));gap:14px">
+      <div class="config-group">
+        <label>Cantidad de operaciones</label>
+        <input type="number" id="basket-size" min="2" max="5" step="1">
+      </div>
+      <div class="config-group">
+        <label>Calidad mínima por operación</label>
+        <input type="number" id="basket-min-quality" min="70" max="95" step="1">
+      </div>
+      <div class="config-group">
+        <label>Historial mínimo por mercado</label>
+        <input type="number" id="basket-min-history" min="0" max="100" step="1">
+      </div>
+      <div class="config-group">
+        <label>Acierto mínimo histórico (%)</label>
+        <input type="number" id="basket-min-winrate" min="0" max="100" step="1">
+      </div>
+    </div>
+    <div class="risk-note" style="margin-top:12px">
+      La canasta solo abre operaciones automáticas en demo, usa mercados del top recomendado y evita repetir el mismo mercado dentro de la canasta. No garantiza ganancias.
+    </div>
     <div class="backtest-section-title">Horario y frecuencia del automático</div>
     <label class="auto-toggle-label" style="margin-bottom:12px">
       <input type="checkbox" id="strategy-use-schedule">

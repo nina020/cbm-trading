@@ -27,6 +27,7 @@ export function createExecutionJournal({ storageKey, onChange, storage = localSt
       id, mercadoId, nombre, tipo, modo, origen, stake, entrada,
       multiplicador = null, precioCotizado = null, costosReportados = null,
       stopLossAmount = null, takeProfitAmount = null,
+      tipoEjecucion = null,
     }) {
       const existente = registros.find(item => String(item.id) === String(id));
       if (existente) return existente;
@@ -37,6 +38,7 @@ export function createExecutionJournal({ storageKey, onChange, storage = localSt
         tipo,
         modo,
         origen,
+        tipoEjecucion,
         stake,
         entrada,
         multiplicador,

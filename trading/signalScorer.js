@@ -2,6 +2,11 @@ export const SIGNAL_CONFIG_DEFAULTS = {
   umbralMinimo: 70,
   confirmacionesRequeridas: 3,
   filtrarAutoTrading: true,
+  basketDemoEnabled: false,
+  basketSize: 3,
+  basketMinQuality: 85,
+  basketMinHistory: 0,
+  basketMinWinRate: 60,
 };
 
 function limitar(value, minimo, maximo) {
@@ -17,6 +22,11 @@ export function normalizarSignalConfig(config = {}) {
       10,
     ),
     filtrarAutoTrading: config.filtrarAutoTrading !== false,
+    basketDemoEnabled: config.basketDemoEnabled === true,
+    basketSize: limitar(Math.round(Number(config.basketSize) || 3), 2, 5),
+    basketMinQuality: limitar(Math.round(Number(config.basketMinQuality) || 85), 70, 95),
+    basketMinHistory: limitar(Math.round(Number(config.basketMinHistory) || 0), 0, 100),
+    basketMinWinRate: limitar(Math.round(Number(config.basketMinWinRate) || 60), 0, 100),
   };
 }
 

@@ -32,6 +32,7 @@ async function cargarModulo(rutaInicial) {
 
 const riskManager = cargarModulo(path.join(__dirname, '../trading/riskManager.js'));
 const strategyRules = cargarModulo(path.join(__dirname, '../trading/strategyRules.js'));
+const basketTrader = cargarModulo(path.join(__dirname, '../trading/basketTrader.js'));
 
 const operacionBuy = {
   tipo: 'BUY',
@@ -328,6 +329,11 @@ test('la configuración de señales aplica límites seguros', async () => {
     umbralMinimo: 95,
     confirmacionesRequeridas: 3,
     filtrarAutoTrading: false,
+    basketDemoEnabled: false,
+    basketSize: 3,
+    basketMinQuality: 85,
+    basketMinHistory: 0,
+    basketMinWinRate: 60,
   });
 });
 
@@ -445,6 +451,86 @@ test('una ejecución bloqueada por cooldown puede reintentarse en la misma seña
   assert.equal(trigger.evaluar({
     tipo: 'BUY', puntuacion: 82, activo: true, config,
   }).ejecutar, true);
+});
+
+test('la canasta 3x solo acepta candidatos demo del top con calidad suficiente', async () => {
+  const { evaluarCandidatoCanasta } = await basketTrader;
+  const config = {
+    basketDemoEnabled: true,
+    basketSize: 3,
+    basketMinQuality: 85,
+    basketMinHistory: 0,
+    basketMinWinRate: 60,
+  };
+
+  assert.equal(evaluarCandidatoCanasta({
+    config,
+    modo: 'real',
+    mercadoId: 'R_10',
+    calidad: 90,
+    topMarketIds: ['R_10', 'R_25', 'stpRNG'],
+    registros: [],
+  }).codigo, 'mode');
+
+  assert.equal(evaluarCandidatoCanasta({
+    config,
+    modo: 'demo',
+    mercadoId: 'R_50',
+    calidad: 90,
+    topMarketIds: ['R_10', 'R_25', 'stpRNG'],
+    registros: [],
+  }).codigo, 'not_top');
+
+  assert.equal(evaluarCandidatoCanasta({
+    config,
+    modo: 'demo',
+    mercadoId: 'R_10',
+    calidad: 80,
+    topMarketIds: ['R_10', 'R_25', 'stpRNG'],
+    registros: [],
+  }).codigo, 'quality');
+
+  assert.equal(evaluarCandidatoCanasta({
+    config,
+    modo: 'demo',
+    mercadoId: 'R_10',
+    calidad: 90,
+    topMarketIds: ['R_10', 'R_25', 'stpRNG'],
+    registros: [],
+  }).permitido, true);
+});
+
+test('la canasta 3x evita repetir mercado y respeta historial mínimo', async () => {
+  const { evaluarCandidatoCanasta } = await basketTrader;
+  const config = {
+    basketDemoEnabled: true,
+    basketSize: 3,
+    basketMinQuality: 85,
+    basketMinHistory: 2,
+    basketMinWinRate: 60,
+  };
+  const registros = [
+    { modo: 'demo', mercadoId: 'R_10', estado: 'pendiente', tipoEjecucion: 'canasta_3x' },
+    { modo: 'demo', mercadoId: 'R_25', estado: 'ganada' },
+  ];
+
+  assert.equal(evaluarCandidatoCanasta({
+    config,
+    modo: 'demo',
+    mercadoId: 'R_10',
+    calidad: 90,
+    topMarketIds: ['R_10', 'R_25', 'stpRNG'],
+    registros,
+  }).codigo, 'duplicate_market');
+
+  assert.equal(evaluarCandidatoCanasta({
+    config,
+    modo: 'demo',
+    mercadoId: 'R_25',
+    calidad: 90,
+    topMarketIds: ['R_10', 'R_25', 'stpRNG'],
+    registros,
+  }).codigo, 'sample');
 });
 
 test('el resumen de backtesting agrupa resultados por calidad', async () => {

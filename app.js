@@ -43,6 +43,7 @@ import { renderMarketRanking } from './components/marketRanking.js';
 import { createPositionChart } from './components/positionChart.js';
 import { ordenarMercadosParaInicio } from './trading/marketRanking.js';
 import { escanearMercadosEstables } from './trading/marketScanner.js';
+import { evaluarCandidatoCanasta } from './trading/basketTrader.js';
 
 let mercadosActivos = {};
 let mercadosEscaneados = [];
@@ -187,6 +188,15 @@ function renderResumenEjecuciones(registros = []) {
 }
 
 function renderRankingMercados() {
+  const mercados = obtenerMercadosRankeados();
+
+  renderMarketRanking(
+    document.getElementById('market-ranking'),
+    mercados,
+  );
+}
+
+function obtenerMercadosRankeados() {
   const estadoEstrategia = evaluarReglasEstrategia({
     config: strategyConfig,
     registros: executionJournal.registros,
@@ -206,10 +216,14 @@ function renderRankingMercados() {
     };
   });
 
-  renderMarketRanking(
-    document.getElementById('market-ranking'),
-    ordenarMercadosParaInicio(mercados),
-  );
+  return ordenarMercadosParaInicio(mercados);
+}
+
+function obtenerTopIdsCanasta() {
+  return obtenerMercadosRankeados()
+    .filter(mercado => mercado.listo && ['recomendable', 'considerar'].includes(mercado.nivel))
+    .slice(0, signalConfig.basketSize || 3)
+    .map(mercado => mercado.id);
 }
 
 async function actualizarRankingAutomatico() {
@@ -623,6 +637,11 @@ function abrirConfiguracionSenales() {
   document.getElementById('signal-threshold').value = signalConfig.umbralMinimo;
   document.getElementById('signal-confirmations').value = signalConfig.confirmacionesRequeridas;
   document.getElementById('signal-filter-auto').checked = signalConfig.filtrarAutoTrading;
+  document.getElementById('basket-demo-enabled').checked = signalConfig.basketDemoEnabled;
+  document.getElementById('basket-size').value = signalConfig.basketSize;
+  document.getElementById('basket-min-quality').value = signalConfig.basketMinQuality;
+  document.getElementById('basket-min-history').value = signalConfig.basketMinHistory;
+  document.getElementById('basket-min-winrate').value = signalConfig.basketMinWinRate;
   document.getElementById('strategy-use-schedule').checked = strategyConfig.usarHorario;
   document.getElementById('strategy-start').value = strategyConfig.horaInicio;
   document.getElementById('strategy-end').value = strategyConfig.horaFin;
@@ -649,6 +668,11 @@ function guardarConfiguracionSenales() {
     umbralMinimo: document.getElementById('signal-threshold').value,
     confirmacionesRequeridas: document.getElementById('signal-confirmations').value,
     filtrarAutoTrading: document.getElementById('signal-filter-auto').checked,
+    basketDemoEnabled: document.getElementById('basket-demo-enabled').checked,
+    basketSize: document.getElementById('basket-size').value,
+    basketMinQuality: document.getElementById('basket-min-quality').value,
+    basketMinHistory: document.getElementById('basket-min-history').value,
+    basketMinWinRate: document.getElementById('basket-min-winrate').value,
   });
   strategyConfig = normalizarStrategyConfig({
     usarHorario: document.getElementById('strategy-use-schedule').checked,
@@ -665,7 +689,7 @@ function guardarConfiguracionSenales() {
   cerrarConfiguracionSenales();
   if (strategyConfig.notificarFueraHorario) solicitarPermisoNotificaciones();
   registrarLogAuto(
-    `Estrategia actualizada: mínimo ${signalConfig.umbralMinimo}/100, ${signalConfig.confirmacionesRequeridas} confirmaciones, horario ${strategyConfig.usarHorario ? `${strategyConfig.horaInicio}-${strategyConfig.horaFin}` : 'sin restricción'}.`,
+    `Estrategia actualizada: mínimo ${signalConfig.umbralMinimo}/100, ${signalConfig.confirmacionesRequeridas} confirmaciones, canasta demo ${signalConfig.basketDemoEnabled ? 'activa' : 'inactiva'}, horario ${strategyConfig.usarHorario ? `${strategyConfig.horaInicio}-${strategyConfig.horaFin}` : 'sin restricción'}.`,
     'success',
   );
 }
@@ -1425,7 +1449,7 @@ async function ejecutarOperacion(mercadoId, tipo, entrada, sl, tp, btnId) {
   }
 }
 
-async function ejecutarOperacionAutomaticaCore(mercadoId, tipo, entrada, sl, tp) {
+async function ejecutarOperacionAutomaticaCore(mercadoId, tipo, entrada, sl, tp, opciones = {}) {
   if (modoEjecucion === 'real') {
     throw new Error('El automático está bloqueado en Cuenta real controlada.');
   }
@@ -1455,6 +1479,7 @@ async function ejecutarOperacionAutomaticaCore(mercadoId, tipo, entrada, sl, tp)
         tipo,
         modo: 'demo',
         origen: 'automatica',
+        tipoEjecucion: opciones.tipoEjecucion || null,
         stake,
         entrada,
         multiplicador: cotizacion.multiplicador ?? multiplicador,
@@ -1463,7 +1488,8 @@ async function ejecutarOperacionAutomaticaCore(mercadoId, tipo, entrada, sl, tp)
         stopLossAmount: objetivos.riesgo,
         takeProfitAmount: objetivos.objetivo,
       });
-      registrarLogAuto(`✅ ${nombre} ${tipo} ejecutado — contrato ${compra.contract_id} | $${stake.toFixed(2)} | x${multiplicador} | saldo: $${compra.balance_after}`, 'success');
+      const etiquetaTipo = opciones.tipoEjecucion === 'canasta_3x' ? 'Canasta 3x demo' : 'Automático';
+      registrarLogAuto(`✅ ${etiquetaTipo}: ${nombre} ${tipo} ejecutado — contrato ${compra.contract_id} | $${stake.toFixed(2)} | x${multiplicador} | saldo: $${compra.balance_after}`, 'success');
       actualizarSaldo();
       cargarPortfolio();
       return true;
@@ -1836,12 +1862,38 @@ async function agregarMercado() {
           });
         }
         if (disparo.ejecutar && !observacionRealActiva) {
+          const decisionCanasta = signalConfig.basketDemoEnabled
+            ? evaluarCandidatoCanasta({
+              config: signalConfig,
+              modo: modoEjecucion,
+              mercadoId: id,
+              calidad: resultadoSenal.calidad.puntuacion,
+              topMarketIds: obtenerTopIdsCanasta(),
+              registros: executionJournal.registros,
+            })
+            : null;
+
+          if (decisionCanasta && !decisionCanasta.permitido) {
+            signalTrigger.liberar();
+            actualizarPanelAutomatico(id, {
+              estadoForzado: null,
+              cooldownRestante: autoTrader.cooldownRestante(id),
+            });
+            registrarLogAuto(`${nombre} ${tipoSenal}: canasta 3x no abrió. ${decisionCanasta.motivo}`, 'info');
+            ultimaSenal = tipoSenal;
+            return;
+          }
+
           actualizarPanelAutomatico(id, { estadoForzado: 'opening' });
           registrarLogAuto(
-            `${nombre} ${tipoSenal}: calidad confirmada ${resultadoSenal.calidad.puntuacion}/100. Abriendo operación automática.`,
+            decisionCanasta
+              ? `${nombre} ${tipoSenal}: calidad ${resultadoSenal.calidad.puntuacion}/100 aprobada para canasta 3x demo. ${decisionCanasta.motivo}`
+              : `${nombre} ${tipoSenal}: calidad confirmada ${resultadoSenal.calidad.puntuacion}/100. Abriendo operación automática.`,
             'success',
           );
-          ejecutarOperacionAuto(id, tipoSenal, precio, sl, tp)
+          ejecutarOperacionAuto(id, tipoSenal, precio, sl, tp, {
+            tipoEjecucion: decisionCanasta ? 'canasta_3x' : null,
+          })
             .then(ejecutada => {
               if (!ejecutada) {
                 signalTrigger.liberar();

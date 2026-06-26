@@ -15,6 +15,12 @@ function modoTexto(modo) {
   return 'Demo real';
 }
 
+function origenTexto(item) {
+  if (item.tipoEjecucion === 'canasta_3x') return 'Canasta 3x';
+  if (item.origen === 'automatica') return 'Automática';
+  return 'Manual';
+}
+
 export function renderExecutionTable({ registros, tbody, empty, summary }) {
   const ganadas = registros.filter(item => item.estado === 'ganada').length;
   const perdidas = registros.filter(item => item.estado === 'perdida').length;
@@ -47,7 +53,7 @@ export function renderExecutionTable({ registros, tbody, empty, summary }) {
         <td>${item.nombre}</td>
         <td><span class="tag ${item.tipo === 'BUY' ? 'tag-buy' : 'tag-sell'}">${item.tipo}</span></td>
         <td>${modoTexto(item.modo)}</td>
-        <td>${item.origen === 'automatica' ? 'Automática' : 'Manual'}</td>
+        <td>${origenTexto(item)}</td>
         <td>$${Number(item.stake).toFixed(2)}</td>
         <td>${item.multiplicador ? `x${item.multiplicador}` : '—'}</td>
         <td><span class="tag tag-${item.estado}">${estado}</span></td>

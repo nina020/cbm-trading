@@ -25,11 +25,11 @@ export function createAutoTrader({
       const transcurrido = getNow() - (ultimaEjecucion[id] || 0);
       return Math.max(0, Math.ceil((getCooldown() * 1000 - transcurrido) / 1000));
     },
-    async procesar(mercadoId, tipo, entrada, sl, tp) {
+    async procesar(mercadoId, tipo, entrada, sl, tp, opciones = {}) {
       const ahora = getNow();
       const cooldownMs = getCooldown() * 1000;
       if (ahora - (ultimaEjecucion[mercadoId] || 0) < cooldownMs) return false;
-      await execute(mercadoId, tipo, entrada, sl, tp);
+      await execute(mercadoId, tipo, entrada, sl, tp, opciones);
       ultimaEjecucion[mercadoId] = ahora;
       return true;
     },
