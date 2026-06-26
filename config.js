@@ -13,6 +13,7 @@ export const GLOBAL_RISK_STORAGE_KEY = 'cbm_global_risk_v1';
 export const ORDER_AUDIT_STORAGE_KEY = 'cbm_order_audit_v1';
 
 export const NOMBRES_SIMBOLOS = {
+  BOOM300N: 'Boom 300',
   BOOM500: 'Boom 500', BOOM600: 'Boom 600', BOOM900: 'Boom 900', BOOM1000: 'Boom 1000',
   CRASH500: 'Crash 500', CRASH600: 'Crash 600', CRASH900: 'Crash 900', CRASH1000: 'Crash 1000',
   stpRNG: 'Step 100', stpRNG2: 'Step 200', stpRNG3: 'Step 300', stpRNG4: 'Step 400', stpRNG5: 'Step 500',
@@ -22,6 +23,7 @@ export const NOMBRES_SIMBOLOS = {
 };
 
 export const MERCADOS_ESTABLES = [
+  { id: 'BOOM300N', nombre: 'Boom 300', perfil: 'media' },
   { id: 'BOOM1000', nombre: 'Boom 1000', perfil: 'estable' },
   { id: 'CRASH1000', nombre: 'Crash 1000', perfil: 'estable' },
   { id: 'stpRNG', nombre: 'Step 100', perfil: 'estable' },
