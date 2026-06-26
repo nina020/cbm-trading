@@ -43,7 +43,7 @@ import { renderMarketRanking } from './components/marketRanking.js';
 import { createPositionChart } from './components/positionChart.js';
 import { ordenarMercadosParaInicio } from './trading/marketRanking.js';
 import { escanearMercadosEstables } from './trading/marketScanner.js';
-import { evaluarCandidatoCanasta } from './trading/basketTrader.js';
+import { evaluarCandidatoCanasta, seleccionarMercadosCanasta } from './trading/basketTrader.js';
 
 let mercadosActivos = {};
 let mercadosEscaneados = [];
@@ -220,10 +220,13 @@ function obtenerMercadosRankeados() {
 }
 
 function obtenerTopIdsCanasta() {
-  return obtenerMercadosRankeados()
-    .filter(mercado => mercado.listo && ['recomendable', 'considerar'].includes(mercado.nivel))
-    .slice(0, signalConfig.basketSize || 3)
+  return seleccionarMercadosCanasta(obtenerMercadosRankeados(), signalConfig)
     .map(mercado => mercado.id);
+}
+
+function obtenerPuntuacionMercadoCanasta(mercadoId) {
+  return obtenerMercadosRankeados()
+    .find(mercado => mercado.id === mercadoId)?.puntuacion ?? null;
 }
 
 async function actualizarRankingAutomatico() {
@@ -640,6 +643,7 @@ function abrirConfiguracionSenales() {
   document.getElementById('basket-demo-enabled').checked = signalConfig.basketDemoEnabled;
   document.getElementById('basket-size').value = signalConfig.basketSize;
   document.getElementById('basket-min-quality').value = signalConfig.basketMinQuality;
+  document.getElementById('basket-min-market-score').value = signalConfig.basketMinMarketScore;
   document.getElementById('basket-min-history').value = signalConfig.basketMinHistory;
   document.getElementById('basket-min-winrate').value = signalConfig.basketMinWinRate;
   document.getElementById('strategy-use-schedule').checked = strategyConfig.usarHorario;
@@ -671,6 +675,7 @@ function guardarConfiguracionSenales() {
     basketDemoEnabled: document.getElementById('basket-demo-enabled').checked,
     basketSize: document.getElementById('basket-size').value,
     basketMinQuality: document.getElementById('basket-min-quality').value,
+    basketMinMarketScore: document.getElementById('basket-min-market-score').value,
     basketMinHistory: document.getElementById('basket-min-history').value,
     basketMinWinRate: document.getElementById('basket-min-winrate').value,
   });
@@ -692,6 +697,7 @@ function guardarConfiguracionSenales() {
     `Estrategia actualizada: mínimo ${signalConfig.umbralMinimo}/100, ${signalConfig.confirmacionesRequeridas} confirmaciones, canasta demo ${signalConfig.basketDemoEnabled ? 'activa' : 'inactiva'}, horario ${strategyConfig.usarHorario ? `${strategyConfig.horaInicio}-${strategyConfig.horaFin}` : 'sin restricción'}.`,
     'success',
   );
+  if (signalConfig.basketDemoEnabled) prepararCanastaDemoAutomatica();
 }
 
 function eliminarCalibracionMercado(mercadoId) {
@@ -1020,6 +1026,9 @@ function cambiarModoEjecucion(modo) {
   renderResumenEjecuciones(executionJournal.registros);
   actualizarSaldo();
   cargarPortfolio();
+  if (modoEjecucion === 'demo' && signalConfig.basketDemoEnabled) {
+    prepararCanastaDemoAutomatica({ silencioso: true });
+  }
 }
 
 function abrirHistorial() {
@@ -1706,20 +1715,76 @@ function actualizarTarjeta(id, precio, ma, rsi, hora, periodo, desv, precios) {
   return { tipo: tipoSenal, calidad };
 }
 
-async function agregarMercado() {
+function seleccionarOpcionMercado(mercadoId) {
+  const sel = document.getElementById('select-mercado');
+  if (!mercadoId) return sel.value;
+  const opcion = Array.from(sel.options).find(item => item.value.startsWith(`${mercadoId}|`));
+  if (!opcion) return null;
+  sel.value = opcion.value;
+  return opcion.value;
+}
+
+async function prepararCanastaDemoAutomatica({ silencioso = false } = {}) {
+  if (!signalConfig.basketDemoEnabled) {
+    if (!silencioso) registrarLogAuto('Canasta 3x demo no está activa.', 'info');
+    return [];
+  }
+  if (modoEjecucion !== 'demo') {
+    registrarLogAuto('Canasta 3x: cambia a Cuenta demo real para preparar mercados automáticamente.', 'info');
+    return [];
+  }
+
+  const candidatos = seleccionarMercadosCanasta(obtenerMercadosRankeados(), signalConfig);
+  if (!candidatos.length) {
+    registrarLogAuto(
+      `Canasta 3x: no hay mercados con puntuación mínima ${signalConfig.basketMinMarketScore}/100 en el top actual.`,
+      'info',
+    );
+    return [];
+  }
+
+  const preparados = [];
+  for (const mercado of candidatos) {
+    const agregado = await agregarMercado(mercado.id, { silencioso: true });
+    if (agregado || mercadosActivos[mercado.id]) {
+      const checkbox = document.querySelector(`#card-${mercado.id} input[type="checkbox"]`);
+      if (checkbox) checkbox.checked = true;
+      if (!autoTrader.estaActivo(mercado.id)) toggleAutoMercado(mercado.id, true);
+      preparados.push(mercado);
+    }
+  }
+
+  if (preparados.length || !silencioso) {
+    registrarLogAuto(
+      `Canasta 3x preparada: ${preparados.map(item => `${item.nombre} (${item.puntuacion}/100)`).join(', ') || 'sin mercados nuevos'}.`,
+      preparados.length ? 'success' : 'info',
+    );
+  }
+  return preparados;
+}
+
+async function agregarMercado(mercadoId = null, opciones = {}) {
+  const { silencioso = false } = opciones;
   const btn = document.getElementById('btn-add-market');
   const sel = document.getElementById('select-mercado');
   const periodo = parseInt(document.getElementById('select-periodo').value);
-  const [simbolo, nombre, perfil] = sel.value.split('|');
+  const valorSeleccionado = seleccionarOpcionMercado(mercadoId);
+  if (!valorSeleccionado) {
+    if (!silencioso) alert(`No encontré el mercado ${mercadoId} en el selector.`);
+    return false;
+  }
+  const [simbolo, nombre, perfil] = valorSeleccionado.split('|');
   const id = simbolo;
 
   if (mercadosActivos[id]) {
-    alert(`${nombre} ya está activo.`);
-    return;
+    if (!silencioso) alert(`${nombre} ya está activo.`);
+    return true;
   }
 
-  btn.disabled = true;
-  btn.textContent = 'Conectando...';
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Conectando...';
+  }
 
   try {
     if (typeof LightweightCharts === 'undefined') {
@@ -1740,8 +1805,10 @@ async function agregarMercado() {
       const el = document.getElementById(`card-${id}`);
       if (el) el.querySelector('.signal-container').innerHTML =
         '<div class="signal signal-loading">Recopilando precios...</div>';
-      btn.disabled = false;
-      btn.textContent = '+ Agregar';
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = '+ Agregar';
+      }
       },
       onMessage: msg => {
       if (msg.error) {
@@ -1868,6 +1935,7 @@ async function agregarMercado() {
               modo: modoEjecucion,
               mercadoId: id,
               calidad: resultadoSenal.calidad.puntuacion,
+              mercadoPuntuacion: obtenerPuntuacionMercadoCanasta(id),
               topMarketIds: obtenerTopIdsCanasta(),
               registros: executionJournal.registros,
             })
@@ -1933,8 +2001,10 @@ async function agregarMercado() {
       const el = document.getElementById(`card-${id}`);
       if (el) el.querySelector('.signal-container').innerHTML =
         '<div class="signal signal-sell">Error de conexión con Deriv. Refrescando mercado...</div>';
-      btn.disabled = false;
-      btn.textContent = '+ Agregar';
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = '+ Agregar';
+      }
       programarRefrescoMercado(id);
       },
       onClose: () => programarRefrescoMercado(id),
@@ -1951,6 +2021,7 @@ async function agregarMercado() {
       calidad: 0,
     };
     renderRankingMercados();
+    return true;
   } catch (error) {
     console.error(error);
     const el = document.getElementById(`card-${id}`);
@@ -1958,10 +2029,13 @@ async function agregarMercado() {
       el.querySelector('.signal-container').innerHTML =
         `<div class="signal signal-sell">Error: ${mensajeAmigableError(error)}</div>`;
     } else {
-      alert(`No se pudo agregar ${nombre}: ${mensajeAmigableError(error)}`);
+      if (!silencioso) alert(`No se pudo agregar ${nombre}: ${mensajeAmigableError(error)}`);
     }
-    btn.disabled = false;
-    btn.textContent = '+ Agregar';
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '+ Agregar';
+    }
+    return false;
   }
 }
 
@@ -2046,6 +2120,7 @@ Object.assign(window, {
   cerrarHistorialClick,
   limpiarHistorial,
   toggleAutoMercado,
+  prepararCanastaDemoAutomatica,
   cargarPortfolio,
   cerrarPosicion,
   cerrarPosicionSimulada,

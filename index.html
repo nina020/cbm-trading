@@ -673,6 +673,10 @@ table.history-table tr:last-child td { border-bottom: none; }
         <input type="number" id="basket-min-quality" min="70" max="95" step="1">
       </div>
       <div class="config-group">
+        <label>Puntuación mínima del mercado</label>
+        <input type="number" id="basket-min-market-score" min="0" max="100" step="1">
+      </div>
+      <div class="config-group">
         <label>Historial mínimo por mercado</label>
         <input type="number" id="basket-min-history" min="0" max="100" step="1">
       </div>
@@ -683,6 +687,9 @@ table.history-table tr:last-child td { border-bottom: none; }
     </div>
     <div class="risk-note" style="margin-top:12px">
       La canasta solo abre operaciones automáticas en demo, usa mercados del top recomendado y evita repetir el mismo mercado dentro de la canasta. No garantiza ganancias.
+    </div>
+    <div style="margin-top:12px;text-align:right">
+      <button class="btn-history" onclick="prepararCanastaDemoAutomatica()">Preparar canasta ahora</button>
     </div>
     <div class="backtest-section-title">Horario y frecuencia del automático</div>
     <label class="auto-toggle-label" style="margin-bottom:12px">

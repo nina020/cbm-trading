@@ -5,6 +5,7 @@ export const SIGNAL_CONFIG_DEFAULTS = {
   basketDemoEnabled: false,
   basketSize: 3,
   basketMinQuality: 85,
+  basketMinMarketScore: 60,
   basketMinHistory: 0,
   basketMinWinRate: 60,
 };
@@ -25,6 +26,7 @@ export function normalizarSignalConfig(config = {}) {
     basketDemoEnabled: config.basketDemoEnabled === true,
     basketSize: limitar(Math.round(Number(config.basketSize) || 3), 2, 5),
     basketMinQuality: limitar(Math.round(Number(config.basketMinQuality) || 85), 70, 95),
+    basketMinMarketScore: limitar(Math.round(Number(config.basketMinMarketScore) || 60), 0, 100),
     basketMinHistory: limitar(Math.round(Number(config.basketMinHistory) || 0), 0, 100),
     basketMinWinRate: limitar(Math.round(Number(config.basketMinWinRate) || 60), 0, 100),
   };

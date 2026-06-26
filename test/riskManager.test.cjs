@@ -332,6 +332,7 @@ test('la configuración de señales aplica límites seguros', async () => {
     basketDemoEnabled: false,
     basketSize: 3,
     basketMinQuality: 85,
+    basketMinMarketScore: 60,
     basketMinHistory: 0,
     basketMinWinRate: 60,
   });
@@ -454,14 +455,22 @@ test('una ejecución bloqueada por cooldown puede reintentarse en la misma seña
 });
 
 test('la canasta 3x solo acepta candidatos demo del top con calidad suficiente', async () => {
-  const { evaluarCandidatoCanasta } = await basketTrader;
+  const { evaluarCandidatoCanasta, seleccionarMercadosCanasta } = await basketTrader;
   const config = {
     basketDemoEnabled: true,
     basketSize: 3,
     basketMinQuality: 85,
+    basketMinMarketScore: 60,
     basketMinHistory: 0,
     basketMinWinRate: 60,
   };
+
+  assert.deepEqual(seleccionarMercadosCanasta([
+    { id: 'BAJO', listo: true, nivel: 'considerar', puntuacion: 59 },
+    { id: 'R_25', listo: true, nivel: 'considerar', puntuacion: 72 },
+    { id: 'R_10', listo: true, nivel: 'recomendable', puntuacion: 88 },
+    { id: 'NO_LISTO', listo: false, nivel: 'recomendable', puntuacion: 99 },
+  ], config).map(item => item.id), ['R_10', 'R_25']);
 
   assert.equal(evaluarCandidatoCanasta({
     config,
@@ -486,6 +495,7 @@ test('la canasta 3x solo acepta candidatos demo del top con calidad suficiente',
     modo: 'demo',
     mercadoId: 'R_10',
     calidad: 80,
+    mercadoPuntuacion: 88,
     topMarketIds: ['R_10', 'R_25', 'stpRNG'],
     registros: [],
   }).codigo, 'quality');
@@ -495,6 +505,17 @@ test('la canasta 3x solo acepta candidatos demo del top con calidad suficiente',
     modo: 'demo',
     mercadoId: 'R_10',
     calidad: 90,
+    mercadoPuntuacion: 55,
+    topMarketIds: ['R_10', 'R_25', 'stpRNG'],
+    registros: [],
+  }).codigo, 'market_score');
+
+  assert.equal(evaluarCandidatoCanasta({
+    config,
+    modo: 'demo',
+    mercadoId: 'R_10',
+    calidad: 90,
+    mercadoPuntuacion: 88,
     topMarketIds: ['R_10', 'R_25', 'stpRNG'],
     registros: [],
   }).permitido, true);
@@ -506,6 +527,7 @@ test('la canasta 3x evita repetir mercado y respeta historial mínimo', async ()
     basketDemoEnabled: true,
     basketSize: 3,
     basketMinQuality: 85,
+    basketMinMarketScore: 60,
     basketMinHistory: 2,
     basketMinWinRate: 60,
   };

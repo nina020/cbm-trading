@@ -2,6 +2,7 @@ export const BASKET_CONFIG_DEFAULTS = {
   basketDemoEnabled: false,
   basketSize: 3,
   basketMinQuality: 85,
+  basketMinMarketScore: 60,
   basketMinHistory: 0,
   basketMinWinRate: 60,
 };
@@ -15,9 +16,22 @@ export function normalizarBasketConfig(config = {}) {
     basketDemoEnabled: config.basketDemoEnabled === true,
     basketSize: limitar(Math.round(Number(config.basketSize) || 3), 2, 5),
     basketMinQuality: limitar(Math.round(Number(config.basketMinQuality) || 85), 70, 95),
+    basketMinMarketScore: limitar(Math.round(Number(config.basketMinMarketScore) || 60), 0, 100),
     basketMinHistory: limitar(Math.round(Number(config.basketMinHistory) || 0), 0, 100),
     basketMinWinRate: limitar(Math.round(Number(config.basketMinWinRate) || 60), 0, 100),
   };
+}
+
+export function seleccionarMercadosCanasta(mercados = [], config = {}) {
+  const normalizada = normalizarBasketConfig(config);
+  return mercados
+    .filter(mercado => (
+      mercado.listo
+      && ['recomendable', 'considerar'].includes(mercado.nivel)
+      && Number(mercado.puntuacion) >= normalizada.basketMinMarketScore
+    ))
+    .sort((a, b) => Number(b.puntuacion) - Number(a.puntuacion))
+    .slice(0, normalizada.basketSize);
 }
 
 export function resumirHistorialCanasta(registros = [], mercadoId) {
@@ -40,6 +54,7 @@ export function evaluarCandidatoCanasta({
   modo,
   mercadoId,
   calidad,
+  mercadoPuntuacion = null,
   topMarketIds = [],
   registros = [],
 }) {
@@ -70,6 +85,17 @@ export function evaluarCandidatoCanasta({
   }
   if (!topMarketIds.includes(mercadoId)) {
     return { permitido: false, codigo: 'not_top', motivo: 'El mercado no está dentro del top recomendado actual.', historial };
+  }
+  const tienePuntuacionMercado = mercadoPuntuacion !== null
+    && mercadoPuntuacion !== undefined
+    && mercadoPuntuacion !== '';
+  if (tienePuntuacionMercado && Number.isFinite(Number(mercadoPuntuacion)) && Number(mercadoPuntuacion) < normalizada.basketMinMarketScore) {
+    return {
+      permitido: false,
+      codigo: 'market_score',
+      motivo: `Puntuación del mercado baja: ${Number(mercadoPuntuacion).toFixed(0)}/${normalizada.basketMinMarketScore}.`,
+      historial,
+    };
   }
   if (Number(calidad) < normalizada.basketMinQuality) {
     return {
