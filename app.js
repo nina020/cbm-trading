@@ -1678,7 +1678,14 @@ function confirmarOperacionReal({ nombre, tipo, stake, objetivos, entrada, sl, t
     + `Stop Loss: ${sl.toFixed(2)}\n`
     + `Take Profit: ${tp.toFixed(2)}\n\n`
     + `Para enviar esta orden escribe exactamente: ${frase}`;
-  return prompt(detalle) === frase;
+  const respuesta = prompt(detalle);
+  if (respuesta === null) return false;
+  const normalizada = respuesta.trim().toUpperCase().replace(',', '.').replace(/\s+/g, ' ');
+  const [palabra, montoTexto] = normalizada.split(' ');
+  const montoConfirmado = Number(montoTexto);
+  return palabra === 'REAL'
+    && Number.isFinite(montoConfirmado)
+    && Math.abs(montoConfirmado - stake) < 0.005;
 }
 
 async function ejecutarOperacion(mercadoId, tipo, entrada, sl, tp, btnId) {
@@ -1751,7 +1758,7 @@ async function ejecutarOperacion(mercadoId, tipo, entrada, sl, tp, btnId) {
         + `Stop Loss: ${sl.toFixed(2)}\n`
         + `Take Profit: ${tp.toFixed(2)}\n\n`
         + (modoEjecucion === 'real'
-          ? 'Para enviar dinero real escribe REAL en la siguiente ventana.'
+          ? `Para enviar dinero real escribe ${`REAL ${stake.toFixed(2)}`} en la siguiente ventana.`
           : '¿Ejecutar esta operación ahora?');
         const aceptada = modoEjecucion !== 'real'
           ? confirm(detalle)
@@ -1776,7 +1783,7 @@ async function ejecutarOperacion(mercadoId, tipo, entrada, sl, tp, btnId) {
         });
         if (accountMode === 'real') {
           emitirAlerta('Orden real cancelada: la confirmación no coincidió o fue cerrada antes de comprar.', 'warning');
-          alert('Orden real cancelada. No se envió dinero real porque la confirmación no coincidió o fue cerrada.');
+          alert(`Orden real cancelada. No se envió dinero real.\n\nPara confirmar debes escribir REAL ${stake.toFixed(2)}.`);
         }
         return false;
       }
