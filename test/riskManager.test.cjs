@@ -48,9 +48,9 @@ test('los objetivos monetarios son proporcionales a la inversión', async () => 
   const objetivos = montos.map(calcularObjetivosMonetarios);
 
   assert.deepEqual(objetivos.map(objetivo => ({ ...objetivo })), [
-    { inversion: 5, riesgo: 4.5, objetivo: 6.75 },
-    { inversion: 20, riesgo: 18, objetivo: 27 },
-    { inversion: 100, riesgo: 90, objetivo: 135 },
+    { inversion: 5, riesgo: 1.25, objetivo: 1.875 },
+    { inversion: 20, riesgo: 5, objetivo: 7.5 },
+    { inversion: 100, riesgo: 25, objetivo: 37.5 },
   ]);
   assert.equal(objetivos[1].objetivo / objetivos[0].objetivo, 4);
 });
@@ -61,9 +61,9 @@ test('el P&L al alcanzar take profit escala con la inversión', async () => {
   const pnl20 = calcularPnlSimulado({ ...operacionBuy, stake: 20, precio: operacionBuy.tp });
   const pnl100 = calcularPnlSimulado({ ...operacionBuy, stake: 100, precio: operacionBuy.tp });
 
-  assert.equal(pnl5, 6.75);
-  assert.equal(pnl20, 27);
-  assert.equal(pnl100, 135);
+  assert.equal(pnl5, 1.875);
+  assert.equal(pnl20, 7.5);
+  assert.equal(pnl100, 37.5);
   assert.equal(pnl20 / pnl5, 4);
 });
 
@@ -72,8 +72,8 @@ test('el P&L al alcanzar stop loss escala con la inversión', async () => {
   const pnl5 = calcularPnlSimulado({ ...operacionBuy, stake: 5, precio: operacionBuy.sl });
   const pnl20 = calcularPnlSimulado({ ...operacionBuy, stake: 20, precio: operacionBuy.sl });
 
-  assert.equal(pnl5, -4.5);
-  assert.equal(pnl20, -18);
+  assert.equal(pnl5, -1.25);
+  assert.equal(pnl20, -5);
   assert.equal(pnl20 / pnl5, 4);
 });
 
@@ -88,7 +88,7 @@ test('el cálculo funciona igual para operaciones SELL', async () => {
     precio: 98.5,
   });
 
-  assert.equal(pnl, 27);
+  assert.equal(pnl, 7.5);
 });
 
 test('BUY y SELL detectan SL/TP exactos y saltos más allá del nivel', async () => {
@@ -149,8 +149,8 @@ test('el motor de simulación conserva la proporción al cerrar operaciones', as
   const pnl5 = await simular(5);
   const pnl20 = await simular(20);
 
-  assert.equal(pnl5, 6.75);
-  assert.equal(pnl20, 27);
+  assert.equal(pnl5, 1.875);
+  assert.equal(pnl20, 7.5);
   assert.equal(pnl20 / pnl5, 4);
 });
 
@@ -176,8 +176,8 @@ test('el motor limita el resultado cuando el precio salta más allá de TP o SL'
     return resultado;
   }
 
-  assert.equal(simular(110), 27);
-  assert.equal(simular(90), -18);
+  assert.equal(simular(110), 7.5);
+  assert.equal(simular(90), -5);
 });
 
 test('el cierre manual conserva el P&L del último precio observado', async () => {
@@ -199,7 +199,7 @@ test('el cierre manual conserva el P&L del último precio observado', async () =
   engine.actualizar('TEST', 100.75);
   engine.cerrar(posicion.id);
 
-  assert.equal(resultado, 13.5);
+  assert.equal(resultado, 3.75);
 });
 
 test('la orden demo usa los mismos objetivos monetarios que la simulación', async () => {
@@ -216,8 +216,8 @@ test('la orden demo usa los mismos objetivos monetarios que la simulación', asy
     multiplicador: 100,
   });
 
-  assert.equal(payload.limit_order.stop_loss, 18);
-  assert.equal(payload.limit_order.take_profit, 27);
+  assert.equal(payload.limit_order.stop_loss, 5);
+  assert.equal(payload.limit_order.take_profit, 7.5);
 });
 
 test('la orden demo redondea montos a 2 decimales para Deriv', async () => {
@@ -239,8 +239,8 @@ test('la orden demo redondea montos a 2 decimales para Deriv', async () => {
   });
 
   assert.equal(payload.amount, 119.97);
-  assert.equal(payload.limit_order.stop_loss, 107.97);
-  assert.equal(payload.limit_order.take_profit, 161.96);
+  assert.equal(payload.limit_order.stop_loss, 29.99);
+  assert.equal(payload.limit_order.take_profit, 44.99);
 });
 
 test('la cotización conserva multiplicador y solo suma costos explícitos', async () => {
@@ -1135,6 +1135,40 @@ test('el riesgo global bloquea pérdida diaria y máximo de posiciones', async (
   assert.equal(mercadoDuplicado.codigo, 'mercado_duplicado');
   assert.equal(mercadoDistinto.codigo, 'ok');
   assert.equal(mercadoGenerico.codigo, 'ok');
+});
+
+test('el riesgo global por defecto usa perdida diaria baja y sin limite de posiciones', async () => {
+  const { createGlobalRiskManager } = await cargarModulo(
+    path.join(__dirname, '../trading/globalRiskManager.js'),
+  );
+  const manager = createGlobalRiskManager({
+    storageKey: 'riesgo-default',
+    storage: {
+      getItem: () => null,
+      setItem: () => {},
+    },
+  });
+  manager.cargar();
+
+  const estado = manager.estado([]);
+  const muchasPosiciones = manager.evaluar({
+    registros: Array.from({ length: 10 }, (_, index) => ({ id: index, estado: 'pendiente', mercadoId: `R_${index}` })),
+    riesgoOperacion: 0.25,
+    mercadoId: 'stpRNG5',
+  });
+  const perdidaDiaria = manager.evaluar({
+    registros: [{
+      estado: 'perdida',
+      pnlNeto: -1.9,
+      cerradaEn: new Date().toISOString(),
+    }],
+    riesgoOperacion: 0.25,
+  });
+
+  assert.equal(estado.config.perdidaMaximaDiaria, 2);
+  assert.equal(estado.config.maxPosicionesAbiertas, 0);
+  assert.equal(muchasPosiciones.codigo, 'ok');
+  assert.equal(perdidaDiaria.codigo, 'perdida_diaria');
 });
 
 test('el riesgo global pausa después de pérdidas consecutivas y puede reanudarse', async () => {

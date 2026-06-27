@@ -404,9 +404,12 @@ function renderEstadoRiesgoGlobal() {
   const pausa = estado.pausado
     ? `Hasta ${new Date(estado.pausaHasta).toLocaleTimeString()}`
     : 'Disponible';
+  const limitePosiciones = estado.config.maxPosicionesAbiertas > 0
+    ? `${estado.posicionesAbiertas}/${estado.config.maxPosicionesAbiertas}`
+    : `${estado.posicionesAbiertas}/sin límite`;
   contenedor.innerHTML = `
     <div class="summary-stat"><div class="summary-stat-label">Pérdida del día</div><div class="summary-stat-value">$${estado.perdidaDiaria.toFixed(2)}</div></div>
-    <div class="summary-stat"><div class="summary-stat-label">Posiciones abiertas</div><div class="summary-stat-value">${estado.posicionesAbiertas}/${estado.config.maxPosicionesAbiertas}</div></div>
+    <div class="summary-stat"><div class="summary-stat-label">Posiciones abiertas</div><div class="summary-stat-value">${limitePosiciones}</div></div>
     <div class="summary-stat"><div class="summary-stat-label">Pérdidas seguidas</div><div class="summary-stat-value">${estado.perdidasConsecutivas}/${estado.config.maxPerdidasConsecutivas}</div></div>
     <div class="summary-stat"><div class="summary-stat-label">Operativa</div><div class="summary-stat-value" style="font-size:13px">${pausa}</div></div>
   `;

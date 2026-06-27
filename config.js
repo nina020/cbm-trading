@@ -1,7 +1,7 @@
 export const INTERVALO_VELA = 5;
 export const MAX_HISTORIAL_VISIBLE = 30;
 export const RATIO_RECOMPENSA = 1.5;
-export const FRACCION_RIESGO_STAKE = 0.9;
+export const FRACCION_RIESGO_STAKE = 0.25;
 export const MULTIPLICADOR_DEFAULT = 100;
 export const STORAGE_KEY = 'cbm_historial_v1';
 export const SIM_STORAGE_KEY = 'cbm_posiciones_simuladas_v1';
@@ -9,7 +9,7 @@ export const EXECUTION_STORAGE_KEY = 'cbm_ejecuciones_v2';
 export const SIGNAL_CONFIG_STORAGE_KEY = 'cbm_signal_config_v1';
 export const STRATEGY_CONFIG_STORAGE_KEY = 'cbm_strategy_config_v1';
 export const MARKET_CALIBRATION_STORAGE_KEY = 'cbm_market_calibration_v1';
-export const GLOBAL_RISK_STORAGE_KEY = 'cbm_global_risk_v1';
+export const GLOBAL_RISK_STORAGE_KEY = 'cbm_global_risk_v2';
 export const ORDER_AUDIT_STORAGE_KEY = 'cbm_order_audit_v1';
 
 export const NOMBRES_SIMBOLOS = {

@@ -1,6 +1,6 @@
 export const GLOBAL_RISK_DEFAULTS = {
-  perdidaMaximaDiaria: 100,
-  maxPosicionesAbiertas: 3,
+  perdidaMaximaDiaria: 2,
+  maxPosicionesAbiertas: 0,
   maxPerdidasConsecutivas: 3,
   pausaMinutos: 30,
 };
@@ -22,7 +22,7 @@ export function normalizarGlobalRiskConfig(config = {}) {
     maxPosicionesAbiertas: Math.round(limitarNumero(
       config.maxPosicionesAbiertas,
       GLOBAL_RISK_DEFAULTS.maxPosicionesAbiertas,
-      1,
+      0,
       50,
     )),
     maxPerdidasConsecutivas: Math.round(limitarNumero(
@@ -142,7 +142,7 @@ export function createGlobalRiskManager({
         };
       }
 
-      if (resumen.posicionesAbiertas >= config.maxPosicionesAbiertas) {
+      if (config.maxPosicionesAbiertas > 0 && resumen.posicionesAbiertas >= config.maxPosicionesAbiertas) {
         return {
           permitido: false,
           codigo: 'max_posiciones',
