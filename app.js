@@ -454,15 +454,23 @@ function reanudarOperativa() {
 function obtenerRegistrosParaRiesgo() {
   const cuentaActual = modoEjecucion === 'real' ? 'real' : 'demo';
   const mercadosPorContrato = contratosDerivMercadoPorCuenta[cuentaActual] || {};
+  const idsAbiertosDeriv = new Set((contratosDerivAbiertosPorCuenta[cuentaActual] || []).map(id => String(id)));
+  const portfolioSincronizado = productionHealth.portfolio.estado === 'ok';
+  const registrosCuenta = executionJournal.registros.filter(item => item.modo === cuentaActual);
+  const registrosVigentes = registrosCuenta.filter(item => (
+    item.estado !== 'pendiente'
+    || !portfolioSincronizado
+    || idsAbiertosDeriv.has(String(item.id))
+  ));
   const idsRegistrados = new Set(
-    executionJournal.registros
+    registrosVigentes
       .filter(item => item.estado === 'pendiente')
       .map(item => String(item.id)),
   );
-  const posicionesExternas = (contratosDerivAbiertosPorCuenta[cuentaActual] || [])
+  const posicionesExternas = Array.from(idsAbiertosDeriv)
     .filter(id => !idsRegistrados.has(String(id)))
     .map(id => ({ id, estado: 'pendiente', mercadoId: mercadosPorContrato[String(id)] || null }));
-  return [...executionJournal.registros, ...posicionesExternas];
+  return [...registrosVigentes, ...posicionesExternas];
 }
 
 function validarAperturaPorRiesgo(riesgoOperacion, mercadoId = null) {
