@@ -2209,53 +2209,6 @@ async function prepararCanastaDemoAutomatica({ silencioso = false } = {}) {
   return preparados;
 }
 
-async function iniciarPruebaDemoAutomatica() {
-  const boton = document.querySelector('[onclick="iniciarPruebaDemoAutomatica()"]');
-  const textoOriginal = boton?.textContent || 'Iniciar prueba demo automática';
-  if (boton) {
-    boton.disabled = true;
-    boton.textContent = 'Preparando demo...';
-  }
-
-  try {
-    signalConfig = normalizarSignalConfig({
-      ...signalConfig,
-      umbralMinimo: Math.max(Number(signalConfig.umbralMinimo) || 70, 85),
-      confirmacionesRequeridas: Math.max(Number(signalConfig.confirmacionesRequeridas) || 3, 3),
-      filtrarAutoTrading: true,
-      basketDemoEnabled: true,
-      basketSize: 3,
-      basketMinQuality: Math.max(Number(signalConfig.basketMinQuality) || 85, 85),
-      basketMinMarketScore: Math.max(Number(signalConfig.basketMinMarketScore) || 60, 60),
-      basketMinHistory: 0,
-      basketMinWinRate: 60,
-    });
-    localStorage.setItem(SIGNAL_CONFIG_STORAGE_KEY, JSON.stringify(signalConfig));
-
-    const selectorModo = document.getElementById('execution-mode');
-    if (selectorModo) selectorModo.value = 'demo';
-    if (modoEjecucion !== 'demo') cambiarModoEjecucion('demo');
-
-    registrarLogAuto('Prueba demo automática: actualizando Top 3 y preparando mercados demo...', 'info');
-    await actualizarRankingAutomatico();
-    const preparados = await prepararCanastaDemoAutomatica();
-    if (preparados.length) {
-      emitirAlerta(
-        `Prueba demo automática activa: ${preparados.map(item => item.nombre).join(', ')}.`,
-        'success',
-        { notificacion: true },
-      );
-    } else {
-      emitirAlerta('Prueba demo automática activa, pero aún no hay mercados Top listos para preparar.', 'warning');
-    }
-  } finally {
-    if (boton) {
-      boton.disabled = false;
-      boton.textContent = textoOriginal;
-    }
-  }
-}
-
 async function agregarMercado(mercadoId = null, opciones = {}) {
   const { silencioso = false } = opciones;
   const btn = document.getElementById('btn-add-market');
@@ -2634,7 +2587,6 @@ Object.assign(window, {
   limpiarHistorial,
   toggleAutoMercado,
   prepararCanastaDemoAutomatica,
-  iniciarPruebaDemoAutomatica,
   cargarPortfolio,
   cerrarPosicion,
   cerrarPosicionSimulada,
