@@ -937,7 +937,9 @@ test('el ranking prioriza un mercado estable con mejor señal e historial', asyn
   );
   const registros = Array.from({ length: 10 }, (_, index) => ({
     mercadoId: 'ESTABLE',
+    modo: 'demo',
     estado: index < 7 ? 'ganada' : 'perdida',
+    pnlNeto: index < 7 ? 0.5 : -0.25,
   }));
   const ranking = ordenarMercadosParaInicio([
     {
@@ -981,13 +983,15 @@ test('el ranking reduce el peso de historiales pequeños y espera datos de preci
   };
   const unaGanada = evaluarMercadoParaInicio({
     ...base,
-    registros: [{ mercadoId: 'TEST', estado: 'ganada' }],
+    registros: [{ mercadoId: 'TEST', modo: 'demo', estado: 'ganada', pnlNeto: 0.5 }],
   });
   const veinteGanadas = evaluarMercadoParaInicio({
     ...base,
     registros: Array.from({ length: 20 }, () => ({
       mercadoId: 'TEST',
+      modo: 'demo',
       estado: 'ganada',
+      pnlNeto: 0.5,
     })),
   });
   const sinPrecio = evaluarMercadoParaInicio({

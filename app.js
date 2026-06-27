@@ -261,6 +261,9 @@ async function actualizarRankingAutomatico() {
       periodo,
     });
     renderRankingMercados();
+    if (modoEjecucion === 'demo' && signalConfig.basketDemoEnabled) {
+      await prepararCanastaDemoAutomatica({ silencioso: true });
+    }
 
     if (!mercadosEscaneados.length && contenedor) {
       contenedor.innerHTML = '<div class="positions-empty">No fue posible analizar los mercados estables en este momento.</div>';
@@ -2238,7 +2241,7 @@ async function iniciarPruebaDemoAutomatica() {
 
     registrarLogAuto('Prueba demo automática: actualizando Top 3 y preparando mercados demo...', 'info');
     await actualizarRankingAutomatico();
-    const preparados = await prepararCanastaDemoAutomatica();
+    const preparados = await prepararCanastaDemoAutomatica({ silencioso: true });
     if (preparados.length) {
       emitirAlerta(
         `Prueba demo automática activa: ${preparados.map(item => item.nombre).join(', ')}.`,
