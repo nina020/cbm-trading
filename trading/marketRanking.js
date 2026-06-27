@@ -10,23 +10,12 @@ function puntosPerfil(perfil) {
 
 function resumirHistorial(registros, mercadoId) {
   const cerradas = registros.filter(
-    item => (
-      item.modo === 'demo'
-      && item.mercadoId === mercadoId
-      && ['ganada', 'perdida'].includes(item.estado)
-    ),
+    item => item.mercadoId === mercadoId && item.estado !== 'pendiente',
   );
   const ganadas = cerradas.filter(item => item.estado === 'ganada').length;
-  const pnl = cerradas.reduce(
-    (total, item) => total + (Number(item.pnlNeto ?? item.pnl) || 0),
-    0,
-  );
   return {
     total: cerradas.length,
-    ganadas,
-    perdidas: cerradas.length - ganadas,
     winRate: cerradas.length ? (ganadas / cerradas.length) * 100 : null,
-    pnl,
   };
 }
 
@@ -56,10 +45,7 @@ export function evaluarMercadoParaInicio({
   const confianzaMuestra = limitar(historial.total / 20, 0, 1);
   const puntosHistorial = historial.winRate === null
     ? 0
-    : (historial.winRate / 100) * confianzaMuestra * 18;
-  const puntosPnlDemo = historial.total
-    ? limitar(historial.pnl / 5, -1, 1) * confianzaMuestra * 7
-    : 0;
+    : (historial.winRate / 100) * confianzaMuestra * 15;
   const puntosCalibracion = calibracion ? 10 : 0;
   const umbralMinimo = Number(calibracion?.umbralMinimo ?? signalConfig?.umbralMinimo);
   const ajusteUmbral = Number.isFinite(umbralMinimo)
@@ -75,7 +61,6 @@ export function evaluarMercadoParaInicio({
     + puntosEstabilidad
     + puntosCalidad
     + puntosHistorial
-    + puntosPnlDemo
     + puntosCalibracion
     + ajusteUmbral
     + ajusteEstrategia,
