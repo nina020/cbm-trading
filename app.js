@@ -1282,6 +1282,13 @@ function parseShortcode(shortcode = '') {
   return { tipo, simbolo, multiplier: multiplierMatch?.[1] || '?' };
 }
 
+function obtenerMercadoIdContrato(contrato = {}) {
+  const directo = contrato.underlying || contrato.symbol;
+  if (directo && NOMBRES_SIMBOLOS[directo]) return directo;
+  const simboloShortcode = parseShortcode(contrato.shortcode || '').simbolo;
+  return NOMBRES_SIMBOLOS[simboloShortcode] ? simboloShortcode : null;
+}
+
 function formatearDuracion(segundos) {
   const total = Math.max(0, Math.floor(Number(segundos) || 0));
   const horas = Math.floor(total / 3600);
@@ -1335,8 +1342,7 @@ function crearTarjetaPosicion(contrato) {
   const { tipo, simbolo, multiplier } = parseShortcode(contrato.shortcode);
   const registro = executionJournal.obtener(contractId);
   const mercadoId = registro?.mercadoId
-    || contrato.underlying
-    || contrato.symbol
+    || obtenerMercadoIdContrato(contrato)
     || simbolo;
   const nombre = registro?.nombre || NOMBRES_SIMBOLOS[mercadoId] || mercadoId;
   const tipoLabel = tipo === 'MULTUP' ? '🟢 BUY' : '🔴 SELL';
@@ -1376,7 +1382,7 @@ function actualizarTarjetaPosicion(c) {
         nivel: Number(c.profit) >= 0 ? 'success' : 'error',
         modo: cuentaActual,
         contratoId: c.contract_id,
-        mercadoId: c.underlying || c.symbol,
+        mercadoId: obtenerMercadoIdContrato(c),
         detalle: `Contrato cerrado con P&L ${Number(c.profit) >= 0 ? '+' : ''}$${Number(c.profit || 0).toFixed(2)}.`,
         datos: { profit: c.profit, costos },
       });
@@ -1407,14 +1413,14 @@ function actualizarTarjetaPosicion(c) {
       nivel: 'warning',
       modo: modoEjecucion === 'real' ? 'real' : 'demo',
       contratoId: c.contract_id,
-      mercadoId: c.underlying || c.symbol,
+      mercadoId: obtenerMercadoIdContrato(c),
       detalle: `Deriv reporta cargos/costos acumulados por $${costosAbiertos.toFixed(2)} en esta posición.`,
       datos: { costos: costosAbiertos },
     });
     emitirAlerta(`Contrato ${c.contract_id}: Deriv reporta costos por $${costosAbiertos.toFixed(2)}.`, 'warning');
   }
 
-  const mercadoId = c.underlying || c.symbol;
+  const mercadoId = obtenerMercadoIdContrato(c);
   if (mercadoId && NOMBRES_SIMBOLOS[mercadoId]) {
     const nombre = NOMBRES_SIMBOLOS[mercadoId];
     el.querySelector('.position-market-name').textContent = nombre;
@@ -1520,7 +1526,9 @@ async function cargarPortfolio({ manual = false } = {}) {
         renderProductionHealth();
         contratosDerivAbiertosPorCuenta[cuentaActual] = contratos.map(c => c.contract_id);
         contratosDerivMercadoPorCuenta[cuentaActual] = Object.fromEntries(
-          contratos.map(c => [String(c.contract_id), c.underlying || c.symbol || parseShortcode(c.shortcode).simbolo]),
+          contratos
+            .map(c => [String(c.contract_id), obtenerMercadoIdContrato(c)])
+            .filter(([, mercadoId]) => Boolean(mercadoId)),
         );
         renderResumenEjecuciones(executionJournal.registros);
         renderEstadoRiesgoGlobal();
@@ -1545,10 +1553,8 @@ async function cargarPortfolio({ manual = false } = {}) {
 
       if (msg.proposal_open_contract) {
         const contrato = msg.proposal_open_contract;
-        if (contrato.underlying || contrato.symbol || contrato.shortcode) {
-          contratosDerivMercadoPorCuenta[cuentaActual][String(contrato.contract_id)] =
-            contrato.underlying || contrato.symbol || parseShortcode(contrato.shortcode).simbolo;
-        }
+        const mercadoContrato = obtenerMercadoIdContrato(contrato);
+        if (mercadoContrato) contratosDerivMercadoPorCuenta[cuentaActual][String(contrato.contract_id)] = mercadoContrato;
         if (contrato.is_sold) {
           const pnl = Number(contrato.profit) || 0;
           cierresDetectados.push({ id: contrato.contract_id, pnl });

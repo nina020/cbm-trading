@@ -68,12 +68,20 @@ export function resumirRiesgoDiario(registros, ahora = Date.now()) {
 }
 
 function tienePosicionAbiertaEnMercado(registros, mercadoId) {
-  if (!mercadoId) return false;
+  const mercadoNormalizado = normalizarMercadoId(mercadoId);
+  if (!mercadoNormalizado) return false;
   return registros.some(item => (
     item.estado === 'pendiente'
-    && item.mercadoId
-    && String(item.mercadoId) === String(mercadoId)
+    && normalizarMercadoId(item.mercadoId) === mercadoNormalizado
   ));
+}
+
+function normalizarMercadoId(mercadoId) {
+  const valor = String(mercadoId || '').trim();
+  if (!valor) return null;
+  const genericos = new Set(['mercado', 'market', 'unknown', 'desconocido', 'null', 'undefined']);
+  if (genericos.has(valor.toLowerCase())) return null;
+  return valor.toUpperCase();
 }
 
 export function createGlobalRiskManager({
