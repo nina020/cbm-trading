@@ -66,14 +66,15 @@ body { background: var(--bg-page); color: var(--text-primary); transition: backg
 .header-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .balance-info { font-size: 12px; display: flex; align-items: center; gap: 8px; color: var(--text-secondary); background: var(--bg-stat); border: 1px solid var(--border); border-radius: 999px; padding: 7px 10px; }
 .balance-value { font-weight: 600; color: #16a06a; font-size: 14px; }
-.account-mode-pill { font-size: 12px; border: 1px solid var(--border); border-radius: 999px; padding: 7px 10px; background: var(--bg-stat); color: var(--text-secondary); }
+.account-mode-pill { font-size: 12px; border: 1px solid var(--border); border-radius: 999px; padding: 0; background: var(--bg-stat); color: var(--text-secondary); overflow: hidden; display: flex; align-items: center; }
+.account-mode-pill select { width: 100%; min-width: 176px; border: 0; background: transparent; color: inherit; font: inherit; font-weight: 600; padding: 7px 30px 7px 11px; outline: none; cursor: pointer; }
 .account-mode-pill.mode-real { color: var(--danger); border-color: rgba(239,83,80,.45); background: rgba(239,83,80,.1); }
 .account-mode-pill.mode-demo { color: var(--blue); border-color: rgba(41,98,255,.45); background: rgba(41,98,255,.1); }
 .theme-toggle { background: var(--bg-stat); border: 1px solid var(--border); border-radius: 6px; padding: 6px 12px; font-size: 13px; cursor: pointer; color: var(--text-primary); display: flex; align-items: center; gap: 6px; }
 .theme-toggle:hover { border-color: #16a06a; }
 
 .summary-bar { margin: 16px 18px 0; background: var(--bg-panel); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 14px; display: flex; flex-direction: column; gap: 12px; box-shadow: var(--shadow); }
-.summary-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(112px, 1fr)); gap: 10px; }
+.summary-stats { display: grid; grid-template-columns: repeat(5, minmax(112px, 1fr)); gap: 10px; }
 .summary-stat { background: var(--bg-stat); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 9px 10px; text-align: center; }
 .summary-stat-label { font-size: 10px; color: var(--text-faint); }
 .summary-stat-value { font-size: 17px; font-weight: 600; margin-top: 2px; }
@@ -155,6 +156,7 @@ body { background: var(--bg-page); color: var(--text-primary); transition: backg
 .market-rank-actions small { font-size: 9px; color: var(--text-faint); }
 @media (max-width: 1050px) {
   .market-ranking-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .summary-stats { grid-template-columns: repeat(3, minmax(112px, 1fr)); }
 }
 @media (max-width: 760px) {
   .market-ranking-list { grid-template-columns: 1fr; }
@@ -343,6 +345,7 @@ table.history-table tr:last-child td { border-bottom: none; }
     width: 100%;
     justify-content: center;
   }
+  .account-mode-pill select { min-width: 0; text-align: center; }
   .config-row {
     width: 100%;
     display: grid;
@@ -365,7 +368,9 @@ table.history-table tr:last-child td { border-bottom: none; }
   .divider { display: none; }
   .summary-bar, .market-ranking-section, .markets { margin-left: 10px; margin-right: 10px; padding-left: 0; padding-right: 0; }
   .summary-bar { padding: 12px; border-radius: 18px; }
-  .summary-stats, .opportunity-grid, .backtest-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .summary-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .summary-stat:first-child { grid-column: 1 / -1; }
+  .opportunity-grid, .backtest-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .summary-stat { padding: 10px 8px; }
   .summary-stat-value { font-size: 16px; }
   .production-panel { gap: 8px; }
@@ -416,6 +421,7 @@ table.history-table tr:last-child td { border-bottom: none; }
 
 @media (max-width: 420px) {
   .summary-stats, .health-grid, .opportunity-grid, .backtest-metrics { grid-template-columns: 1fr 1fr; }
+  .summary-stat:first-child { grid-column: 1 / -1; }
   .mobile-bottom-nav {
     left: 6px;
     right: 6px;
@@ -481,7 +487,12 @@ table.history-table tr:last-child td { border-bottom: none; }
 <div class="header">
   <h1>Panel de trading</h1>
   <div class="header-right">
-    <div class="account-mode-pill mode-demo" id="account-mode-pill">Cuenta demo real</div>
+    <div class="account-mode-pill mode-demo" id="account-mode-pill">
+      <select id="execution-mode" aria-label="Modo de ejecución" onchange="cambiarModoEjecucion(this.value)">
+        <option value="demo" selected>Cuenta demo real</option>
+        <option value="real">Cuenta real controlada</option>
+      </select>
+    </div>
     <div class="balance-info">
       <span id="balance-label">Saldo demo (Deriv):</span>
       <span class="balance-value" id="balance-value">Cargando...</span>
@@ -515,14 +526,6 @@ table.history-table tr:last-child td { border-bottom: none; }
     <div class="summary-stat">
       <div class="summary-stat-label" id="hist-balance-label">Saldo demo</div>
       <div class="summary-stat-value" id="hist-saldo-sim">$10,000.00</div>
-    </div>
-    <div class="summary-stat">
-      <div class="summary-stat-label" id="hist-pnl-label">P&L cerrado</div>
-      <div class="summary-stat-value" id="hist-pnl">$0.00</div>
-    </div>
-    <div class="summary-stat">
-      <div class="summary-stat-label">Pérdida acumulada</div>
-      <div class="summary-stat-value" id="hist-loss-amount" style="color:#e0483d">$0.00</div>
     </div>
   </div>
   <div class="production-panel">
@@ -603,18 +606,6 @@ table.history-table tr:last-child td { border-bottom: none; }
       </label>
       <input type="number" id="fixed-input" value="10" min="1" step="1" disabled oninput="actualizarMontoFijo(this.value)">
     </div>
-
-    <div class="divider"></div>
-
-    <div class="config-group period">
-      <label>Modo de ejecución</label>
-      <select id="execution-mode" onchange="cambiarModoEjecucion(this.value)">
-        <option value="demo" selected>Cuenta demo real</option>
-        <option value="real">Cuenta real controlada</option>
-      </select>
-    </div>
-
-    <div class="divider"></div>
 
     <button class="btn-add" id="btn-add-market" onclick="agregarMercado()">+ Agregar</button>
   </div>

@@ -141,31 +141,13 @@ function renderResumenEjecuciones(registros = []) {
   const perdidas = registrosVigentes.filter(item => item.estado === 'perdida').length;
   const resueltas = ganadas + perdidas;
   const winrate = resueltas > 0 ? `${((ganadas / resueltas) * 100).toFixed(1)}%` : '—';
-  const pnlCerrado = registrosVigentes.reduce((total, item) => {
-    if (item.estado === 'pendiente') return total;
-    const pnl = Number(item.pnlNeto ?? item.pnl);
-    return Number.isFinite(pnl) ? total + pnl : total;
-  }, 0);
-  const perdidaAcumulada = registrosVigentes.reduce((totalPerdido, item) => {
-    const pnl = Number(item.pnlNeto ?? item.pnl);
-    return Number.isFinite(pnl) && pnl < 0 ? totalPerdido + Math.abs(pnl) : totalPerdido;
-  }, 0);
-
-  const pnlEl = document.getElementById('hist-pnl');
-  const pnlLabel = document.getElementById('hist-pnl-label');
   const totalLabel = document.getElementById('hist-total-label');
   if (totalLabel) totalLabel.textContent = cuentaActual === 'real' ? 'Operaciones reales' : 'Operaciones demo';
-  if (pnlLabel) pnlLabel.textContent = cuentaActual === 'real' ? 'P&L real cerrado' : 'P&L demo cerrado';
-  pnlEl.textContent = (pnlCerrado >= 0 ? '+$' : '-$')
-    + Math.abs(pnlCerrado).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  pnlEl.style.color = pnlCerrado >= 0 ? '#26a69a' : '#ef5350';
 
   document.getElementById('hist-total').textContent = registrosVigentes.length;
   document.getElementById('hist-ganadas').textContent = ganadas;
   document.getElementById('hist-perdidas').textContent = perdidas;
   document.getElementById('hist-winrate').textContent = winrate;
-  document.getElementById('hist-loss-amount').textContent =
-    `$${perdidaAcumulada.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function renderRankingMercados() {
@@ -451,12 +433,12 @@ function temaActual() {
 
 function actualizarIndicadorModo() {
   const pill = document.getElementById('account-mode-pill');
-  if (!pill) return;
-  pill.classList.remove('mode-real', 'mode-demo');
-  pill.classList.add(`mode-${modoEjecucion}`);
-  pill.textContent = modoEjecucion === 'real'
-    ? 'Cuenta real controlada'
-    : 'Cuenta demo real';
+  const selector = document.getElementById('execution-mode');
+  if (pill) {
+    pill.classList.remove('mode-real', 'mode-demo');
+    pill.classList.add(`mode-${modoEjecucion}`);
+  }
+  if (selector && selector.value !== modoEjecucion) selector.value = modoEjecucion;
 }
 
 function toggleTheme() {
