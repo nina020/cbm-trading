@@ -101,6 +101,23 @@ body { background: var(--bg-page); color: var(--text-primary); transition: backg
 .config-group { display: flex; flex-direction: column; gap: 4px; }
 .config-group label { font-size: 11px; color: var(--text-secondary); white-space: nowrap; }
 .config-group select, .config-group input[type="number"], .config-group input[type="time"] { padding: 7px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; background: var(--bg-stat); color: var(--text-primary); }
+.config-group.market select, .config-group.period select {
+  appearance: none;
+  min-height: 36px;
+  padding: 8px 34px 8px 10px;
+  border-radius: 10px;
+  font-weight: 600;
+  background:
+    linear-gradient(45deg, transparent 50%, var(--text-secondary) 50%) calc(100% - 17px) 50% / 6px 6px no-repeat,
+    linear-gradient(135deg, var(--text-secondary) 50%, transparent 50%) calc(100% - 12px) 50% / 6px 6px no-repeat,
+    var(--bg-stat);
+  transition: border-color .18s, box-shadow .18s, background-color .18s;
+}
+.config-group.market select:focus, .config-group.period select:focus {
+  border-color: rgba(22,160,106,.75);
+  box-shadow: 0 0 0 3px rgba(22,160,106,.14);
+  outline: none;
+}
 .config-group.market select { width: min(100%, 200px); }
 .config-group.period select { width: min(100%, 150px); }
 .config-group.num input { width: 80px; }
@@ -339,13 +356,25 @@ table.history-table tr:last-child td { border-bottom: none; }
   .header-right {
     width: 100%;
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: minmax(0, 1.18fr) minmax(0, .82fr);
     gap: 8px;
   }
   .balance-info {
-    grid-column: 1 / -1;
-    justify-content: space-between;
+    grid-column: auto;
+    justify-content: center;
     width: 100%;
+    min-width: 0;
+    padding: 7px 8px;
+  }
+  .balance-info #balance-label {
+    display: none;
+  }
+  .balance-value {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13px;
   }
   .header-invest-controls {
     grid-column: 1 / -1;
@@ -369,8 +398,26 @@ table.history-table tr:last-child td { border-bottom: none; }
     gap: 10px;
   }
   .config-group, .config-group.market select, .config-group.period select, .invest-mode, .btn-add, .btn-history, .btn-clear { width: 100%; justify-content: center; }
+  .config-group.market, .config-group.period {
+    gap: 6px;
+    padding: 9px;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    background: var(--bg-stat);
+  }
+  .config-group.market label, .config-group.period label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+  }
   .config-group.market { grid-column: 1 / -1; }
-  .config-group.market select { min-height: 40px; }
+  .config-group.market select, .config-group.period select {
+    min-height: 42px;
+    border-radius: 12px;
+    background-color: var(--bg-panel);
+  }
   .btn-add { grid-column: 1 / -1; height: 42px; }
   .invest-mode {
     min-height: 42px;
@@ -455,8 +502,15 @@ table.history-table tr:last-child td { border-bottom: none; }
     font-size: 9px;
   }
   .config-row { grid-template-columns: 1fr; }
+  .header-right { grid-template-columns: minmax(0, 1.12fr) minmax(92px, .88fr); }
+  .account-mode-pill select { font-size: 11px; padding: 7px 24px 7px 9px; }
+  .balance-value { font-size: 12px; }
   .header-invest-controls { grid-template-columns: 1fr; }
   .trade-plan { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 340px) {
+  .header-right { grid-template-columns: 1fr; }
 }
 
 /* ===== Refinamientos Meridian ===== */
@@ -626,7 +680,6 @@ table.history-table tr:last-child td { border-bottom: none; }
     <button class="btn-add" id="btn-add-market" onclick="agregarMercado()">+ Agregar</button>
   </div>
 
-  <div class="risk-note"><b>Cuenta demo real</b> envía órdenes a la cuenta demo de Deriv (dinero ficticio). <b>Cuenta real controlada</b> usa dinero real, bloquea automático y limita cada operación a $2.</div>
   <div class="storage-note">💾 El historial de señales se guarda automáticamente en este navegador y persiste al recargar la página.</div>
 </div>
 
