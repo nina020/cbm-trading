@@ -412,7 +412,7 @@ table.history-table tr:last-child td { border-bottom: none; }
     text-transform: uppercase;
     color: var(--text-faint);
   }
-  .config-group.market { grid-column: 1 / -1; }
+  .config-group.market { grid-column: auto; }
   .config-group.market select, .config-group.period select {
     min-height: 42px;
     border-radius: 12px;
@@ -501,7 +501,7 @@ table.history-table tr:last-child td { border-bottom: none; }
     height: 44px;
     font-size: 9px;
   }
-  .config-row { grid-template-columns: 1fr; }
+  .config-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .header-right { grid-template-columns: minmax(0, 1.12fr) minmax(92px, .88fr); }
   .account-mode-pill select { font-size: 11px; padding: 7px 24px 7px 9px; }
   .balance-value { font-size: 12px; }
@@ -511,6 +511,7 @@ table.history-table tr:last-child td { border-bottom: none; }
 
 @media (max-width: 340px) {
   .header-right { grid-template-columns: 1fr; }
+  .config-row { grid-template-columns: 1fr; }
 }
 
 /* ===== Refinamientos Meridian ===== */
