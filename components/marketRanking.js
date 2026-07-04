@@ -29,7 +29,7 @@ export function renderMarketRanking(contenedor, mercados) {
       <div class="market-rank-position">${mercado.listo ? index + 1 : '—'}</div>
       <div class="market-rank-main">
         <strong>${mercado.nombre}</strong>
-        <span>${etiquetaNivel(mercado.nivel)}${mercado.calibrado ? ' · Calibrado' : ''}</span>
+        <span>${etiquetaNivel(mercado.nivel)}</span>
       </div>
       <div class="market-rank-score">${mercado.puntuacion}/100</div>
       <div class="market-rank-details">
@@ -38,7 +38,6 @@ export function renderMarketRanking(contenedor, mercados) {
         <div class="market-rank-metric"><small>Umbral</small><b>${mercado.umbralMinimo ? `${mercado.umbralMinimo}/100` : 'Global'}</b></div>
         <div class="market-rank-metric"><small>Historial</small><b>${mercado.historial.total ? `${mercado.historial.winRate.toFixed(0)}%` : 'Sin datos'}</b></div>
         <div class="market-rank-metric"><small>Operativa</small><b>${etiquetaEstrategia(mercado.estrategia)}</b></div>
-        <div class="market-rank-metric"><small>Base</small><b>${mercado.calibrado ? 'Calibrado' : 'Sin calibrar'}</b></div>
       </div>
       <div class="market-rank-actions">
         <small>Recomendación ${index + 1}</small>

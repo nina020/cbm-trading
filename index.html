@@ -119,17 +119,8 @@ body { background: var(--bg-page); color: var(--text-primary); transition: backg
 .risk-note { font-size: 11px; color: var(--text-faint); }
 .storage-note { font-size: 11px; color: var(--text-faint); display: flex; align-items: center; gap: 6px; }
 .backtest-panel { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
-.backtest-controls { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
-.backtest-results { margin-top: 12px; }
 .backtest-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; }
-.backtest-note { margin-top: 10px; font-size: 11px; color: var(--text-secondary); text-align: center; }
 .backtest-section-title { margin: 16px 0 8px; font-size: 13px; font-weight: 600; color: var(--text-primary); }
-.backtest-table { min-width: 520px; }
-.calibration-recommendation { margin-top: 14px; padding: 12px; border: 1px solid rgba(41,98,255,.45); border-radius: 8px; background: rgba(41,98,255,.08); display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 12px; color: var(--text-primary); }
-.calibration-recommendation div div { margin-top: 3px; color: var(--text-secondary); }
-.calibration-recommendation small { display: block; margin-top: 4px; color: #c98a1e; }
-.calibration-list { display: flex; flex-direction: column; gap: 8px; }
-.calibration-item { padding: 9px 10px; border: 1px solid var(--border); border-radius: 6px; display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 12px; color: var(--text-primary); }
 
 .execution-section { padding: 16px 20px 0; }
 .section-title-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; flex-wrap: wrap; gap: 10px; }
@@ -348,7 +339,6 @@ table.history-table tr:last-child td { border-bottom: none; }
     <button class="side-link" onclick="actualizarMercadosTop()">Mercados top</button>
     <button class="side-link" onclick="abrirPosiciones()">Posiciones</button>
     <button class="side-link" onclick="alternarRegistroEjecuciones()">Ejecuciones</button>
-    <button class="side-link" onclick="abrirBacktesting()">Backtesting</button>
     <button class="side-link" onclick="abrirEvaluacionSemanal()">Evaluación</button>
     <button class="side-link" onclick="abrirConfiguracionSenales()">Señales</button>
     <button class="side-link" onclick="abrirConfiguracionRiesgo()">Riesgo</button>
@@ -510,7 +500,7 @@ table.history-table tr:last-child td { border-bottom: none; }
   <div class="section-title-row">
     <div class="section-title">Mercados recomendados para comenzar</div>
   </div>
-  <div class="market-ranking-note">Top 3 automático basado en datos históricos recientes, estabilidad, calibración y resultados registrados. No garantiza ganancias.</div>
+  <div class="market-ranking-note">Top 3 automático basado en datos históricos recientes, estabilidad y operaciones reales en Deriv. No garantiza ganancias.</div>
   <div class="market-ranking-list" id="market-ranking">
     <div class="positions-empty">Analizando mercados estables...</div>
   </div>
@@ -597,32 +587,6 @@ table.history-table tr:last-child td { border-bottom: none; }
       <div class="positions-group" id="simulated-positions-group" style="display:none">
         <div class="positions-group-title">Simulación segura</div>
         <div id="simulated-positions"></div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<div class="modal-overlay" id="backtest-modal" onclick="cerrarBacktestingClick(event)">
-  <div class="modal-content">
-    <div class="modal-header">
-      <h2>Backtesting histórico</h2>
-      <button class="modal-close" onclick="cerrarBacktesting()">✕ Cerrar</button>
-    </div>
-    <div class="backtest-panel">
-      <div class="backtest-controls">
-        <div class="config-group">
-          <label>Muestra histórica</label>
-          <select id="backtest-count">
-            <option value="500">500 ticks</option>
-            <option value="1000" selected>1,000 ticks</option>
-            <option value="5000">5,000 ticks</option>
-          </select>
-        </div>
-        <button class="btn-add" id="btn-backtest" onclick="ejecutarBacktestActual()">Ejecutar backtest</button>
-        <div class="risk-note">Compara sin filtro y umbrales 70, 80 y 90 usando las confirmaciones configuradas. No ejecuta operaciones.</div>
-      </div>
-      <div class="backtest-results" id="backtest-results">
-        <div class="positions-empty">Selecciona la configuración y ejecuta el backtest.</div>
       </div>
     </div>
   </div>
@@ -766,8 +730,6 @@ table.history-table tr:last-child td { border-bottom: none; }
     <div class="risk-note" style="margin-top:12px">
       La puntuación combina tendencia, RSI, momentum y consistencia. El horario y la frecuencia controlan solo el automático; fuera de horario puede avisar, pero no ejecuta.
     </div>
-    <div class="backtest-section-title">Calibraciones guardadas por mercado</div>
-    <div id="market-calibration-list" class="positions-empty">No hay calibraciones guardadas.</div>
     <div style="margin-top:16px;text-align:right">
       <button class="btn-add" onclick="guardarConfiguracionSenales()">Guardar configuración</button>
     </div>

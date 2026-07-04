@@ -2,7 +2,6 @@ import {
   INTERVALO_VELA, RATIO_RECOMPENSA, MULTIPLICADOR_DEFAULT,
   SIM_STORAGE_KEY,
   EXECUTION_STORAGE_KEY, SIGNAL_CONFIG_STORAGE_KEY, STRATEGY_CONFIG_STORAGE_KEY,
-  MARKET_CALIBRATION_STORAGE_KEY,
   GLOBAL_RISK_STORAGE_KEY, ORDER_AUDIT_STORAGE_KEY, NOMBRES_SIMBOLOS, MERCADOS_ESTABLES, TEMAS,
 } from './config.js';
 import { obtenerCuenta, obtenerWsUrl } from './services/derivApi.js';
@@ -27,8 +26,6 @@ import {
 import {
   STRATEGY_CONFIG_DEFAULTS, evaluarReglasEstrategia, normalizarStrategyConfig,
 } from './trading/strategyRules.js';
-import { createMarketCalibrationStore } from './trading/marketCalibration.js';
-import { ejecutarComparativaBacktest } from './trading/backtestEngine.js';
 import { createGlobalRiskManager } from './trading/globalRiskManager.js';
 import { evaluarPreparacionReal, evaluarSemanaTrading } from './trading/weeklyEvaluation.js';
 import { createMarketCard } from './components/marketCard.js';
@@ -38,9 +35,6 @@ import {
 } from './components/positionCards.js';
 import { renderExecutionTable } from './components/executionTable.js';
 import { renderAutoStatus } from './components/autoStatus.js';
-import {
-  renderBacktestResults, renderBacktestLoading, renderBacktestError,
-} from './components/backtestResults.js';
 import { renderMarketRanking } from './components/marketRanking.js';
 import { createPositionChart } from './components/positionChart.js';
 import { ordenarMercadosParaInicio } from './trading/marketRanking.js';
@@ -73,15 +67,11 @@ let positionChartTimer = null;
 let cooldownAutoSeg = 60;
 let signalConfig = { ...SIGNAL_CONFIG_DEFAULTS };
 let strategyConfig = { ...STRATEGY_CONFIG_DEFAULTS };
-let ultimoBacktest = null;
 const estadosAutomaticos = {};
 const notificacionesOportunidad = {};
 let oportunidadFueraHorario = null;
 let filtroEjecuciones = 'todos';
 const riskManager = createRiskManager({ saldoInicial: saldoReal });
-const marketCalibrationStore = createMarketCalibrationStore({
-  storageKey: MARKET_CALIBRATION_STORAGE_KEY,
-});
 const globalRiskManager = createGlobalRiskManager({
   storageKey: GLOBAL_RISK_STORAGE_KEY,
 });
@@ -91,7 +81,6 @@ const cloudSyncReady = iniciarSincronizacionCloud([
   EXECUTION_STORAGE_KEY,
   SIGNAL_CONFIG_STORAGE_KEY,
   STRATEGY_CONFIG_STORAGE_KEY,
-  MARKET_CALIBRATION_STORAGE_KEY,
   GLOBAL_RISK_STORAGE_KEY,
   ORDER_AUDIT_STORAGE_KEY,
 ]).catch(error => {
@@ -198,13 +187,11 @@ function obtenerMercadosRankeados() {
   });
   const mercados = mercadosEscaneados.map(mercado => {
     const mercadoActivo = mercadosActivos[mercado.id];
-    const calibracion = marketCalibrationStore.obtener(mercado.id);
     return {
       ...mercado,
       precio: mercadoActivo?.precio ?? mercado.precio,
       desviacion: mercadoActivo?.desviacion ?? mercado.desviacion,
       calidad: mercadoActivo?.calidad ?? mercado.calidad,
-      calibracion,
       signalConfig: obtenerSignalConfigMercado(mercado.id),
       estrategia: estadoEstrategia,
       registros: executionJournal.registros,
@@ -703,14 +690,8 @@ async function invertirOportunidadFueraHorario() {
   }
 }
 
-function obtenerSignalConfigMercado(mercadoId) {
-  const calibracion = marketCalibrationStore.obtener(mercadoId);
-  if (!calibracion) return signalConfig;
-  return normalizarSignalConfig({
-    ...signalConfig,
-    umbralMinimo: calibracion.umbralMinimo,
-    confirmacionesRequeridas: calibracion.confirmacionesRequeridas,
-  });
+function obtenerSignalConfigMercado() {
+  return signalConfig;
 }
 
 function actualizarPanelAutomatico(mercadoId, cambios = {}) {
@@ -725,30 +706,11 @@ function actualizarPanelAutomatico(mercadoId, cambios = {}) {
     ...estadosAutomaticos[mercadoId],
     ...cambios,
     config,
-    calibrado: Boolean(marketCalibrationStore.obtener(mercadoId)),
   };
   renderAutoStatus(
     document.getElementById(`auto-status-${mercadoId}`),
     estadosAutomaticos[mercadoId],
   );
-}
-
-function renderCalibracionesMercado() {
-  const contenedor = document.getElementById('market-calibration-list');
-  if (!contenedor) return;
-  const calibraciones = Object.values(marketCalibrationStore.listar());
-  if (!calibraciones.length) {
-    contenedor.className = 'positions-empty';
-    contenedor.textContent = 'No hay calibraciones guardadas.';
-    return;
-  }
-  contenedor.className = 'calibration-list';
-  contenedor.innerHTML = calibraciones.map(item => `
-    <div class="calibration-item">
-      <span><b>${NOMBRES_SIMBOLOS[item.mercadoId] || item.mercadoId}</b> · ≥ ${item.umbralMinimo} · ${item.confirmacionesRequeridas} confirmaciones</span>
-      <button class="btn-clear" onclick="eliminarCalibracionMercado('${item.mercadoId}')">Quitar</button>
-    </div>
-  `).join('');
 }
 
 function abrirConfiguracionSenales() {
@@ -770,7 +732,6 @@ function abrirConfiguracionSenales() {
   document.querySelectorAll('[data-strategy-day]').forEach(input => {
     input.checked = strategyConfig.diasPermitidos.includes(Number(input.value));
   });
-  renderCalibracionesMercado();
   document.getElementById('signal-config-modal').style.display = 'flex';
 }
 
@@ -813,25 +774,6 @@ function guardarConfiguracionSenales() {
     'success',
   );
   if (signalConfig.basketDemoEnabled) prepararCanastaDemoAutomatica();
-}
-
-function eliminarCalibracionMercado(mercadoId) {
-  marketCalibrationStore.eliminar(mercadoId);
-  renderCalibracionesMercado();
-  renderRankingMercados();
-  registrarLogAuto(`${NOMBRES_SIMBOLOS[mercadoId] || mercadoId}: calibración eliminada.`, 'info');
-}
-
-function abrirBacktesting() {
-  document.getElementById('backtest-modal').style.display = 'flex';
-}
-
-function cerrarBacktesting() {
-  document.getElementById('backtest-modal').style.display = 'none';
-}
-
-function cerrarBacktestingClick(event) {
-  if (event.target.id === 'backtest-modal') cerrarBacktesting();
 }
 
 function dinero(value, signo = false) {
@@ -1046,62 +988,6 @@ function cerrarGraficoPosicion() {
     contenedor.style.display = 'none';
     contenedor.innerHTML = '';
   }
-}
-
-async function ejecutarBacktestActual() {
-  const boton = document.getElementById('btn-backtest');
-  const contenedor = document.getElementById('backtest-results');
-  const [simbolo, nombre] = document.getElementById('select-mercado').value.split('|');
-  const periodo = parseInt(document.getElementById('select-periodo').value);
-  const count = parseInt(document.getElementById('backtest-count').value);
-  const stake = calcularInversionSugerida();
-
-  boton.disabled = true;
-  boton.textContent = 'Analizando...';
-  renderBacktestLoading(contenedor, `Cargando ${count.toLocaleString()} ticks de ${nombre}...`);
-
-  try {
-    const ticks = await obtenerTicksHistoricos(simbolo, count);
-    const resultado = ejecutarComparativaBacktest({
-      ticks,
-      periodo,
-      stake,
-      saldoInicial: saldoReal,
-      umbralSeleccionado: signalConfig.umbralMinimo,
-      confirmacionesRequeridas: signalConfig.confirmacionesRequeridas,
-    });
-    ultimoBacktest = {
-      mercadoId: simbolo,
-      mercadoNombre: nombre,
-      resultado: { ...resultado, mercadoId: simbolo, mercadoNombre: nombre },
-    };
-    renderBacktestResults(contenedor, ultimoBacktest.resultado);
-  } catch (error) {
-    console.error(error);
-    renderBacktestError(contenedor, error.message);
-  } finally {
-    boton.disabled = false;
-    boton.textContent = 'Ejecutar backtest';
-  }
-}
-
-function aplicarCalibracionBacktest() {
-  if (!ultimoBacktest?.resultado.recomendacion.disponible) return;
-  const recomendacion = ultimoBacktest.resultado.recomendacion;
-  marketCalibrationStore.establecer(ultimoBacktest.mercadoId, {
-    umbralMinimo: recomendacion.umbralMinimo,
-    confirmacionesRequeridas: recomendacion.confirmacionesRequeridas,
-    total: recomendacion.total,
-    winRate: recomendacion.winRate,
-    pnl: recomendacion.pnl,
-    maxDrawdown: recomendacion.maxDrawdown,
-    muestraTicks: ultimoBacktest.resultado.totalTicks,
-  });
-  renderRankingMercados();
-  registrarLogAuto(
-    `${ultimoBacktest.mercadoNombre}: calibración aplicada en ≥ ${recomendacion.umbralMinimo} con ${recomendacion.confirmacionesRequeridas} confirmaciones.`,
-    'success',
-  );
 }
 
 function cambiarModoEjecucion(modo) {
@@ -2417,10 +2303,6 @@ Object.assign(window, {
   cerrarConfiguracionRiesgoClick,
   guardarConfiguracionRiesgo,
   reanudarOperativa,
-  eliminarCalibracionMercado,
-  abrirBacktesting,
-  cerrarBacktesting,
-  cerrarBacktestingClick,
   abrirEvaluacionSemanal,
   cerrarEvaluacionSemanal,
   cerrarEvaluacionSemanalClick,
@@ -2441,8 +2323,6 @@ Object.assign(window, {
   verGraficoPosicion,
   cerrarGraficoPosicion,
   reconciliarConDeriv,
-  ejecutarBacktestActual,
-  aplicarCalibracionBacktest,
   toggleAutoMercado,
   prepararCanastaDemoAutomatica,
   cargarPortfolio,
@@ -2454,17 +2334,19 @@ Object.assign(window, {
   quitarMercado,
 });
 
-function limpiarHistorialHuerfano() {
-  // El historial de señales se eliminó de la app; purga los datos que
-  // quedaron guardados en este navegador y en la nube.
-  localStorage.removeItem('cbm_historial_v1');
-  fetch('/api/state/cbm_historial_v1', { method: 'DELETE' }).catch(() => {});
+function limpiarDatosHuerfanos() {
+  // El historial de señales y el backtesting (con sus calibraciones) se
+  // eliminaron de la app; purga los datos que quedaron guardados en este
+  // navegador y en la nube.
+  ['cbm_historial_v1', 'cbm_market_calibration_v1'].forEach(key => {
+    localStorage.removeItem(key);
+    fetch(`/api/state/${key}`, { method: 'DELETE' }).catch(() => {});
+  });
 }
 
 async function iniciarApp() {
   await cloudSyncReady;
-  limpiarHistorialHuerfano();
-  marketCalibrationStore.cargar();
+  limpiarDatosHuerfanos();
   globalRiskManager.cargar();
   cargarSignalConfig();
   cargarStrategyConfig();

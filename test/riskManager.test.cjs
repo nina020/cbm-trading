@@ -710,119 +710,6 @@ test('la canasta 3x evita repetir mercado y respeta historial mínimo', async ()
   }).codigo, 'sample');
 });
 
-test('el resumen de backtesting agrupa resultados por calidad', async () => {
-  const { resumirCalidad } = await cargarModulo(
-    path.join(__dirname, '../trading/backtestEngine.js'),
-  );
-  const resumen = resumirCalidad([
-    { calidad: 65, resultado: 'perdida', pnl: -4 },
-    { calidad: 74, resultado: 'ganada', pnl: 6 },
-    { calidad: 78, resultado: 'perdida', pnl: -4 },
-    { calidad: 85, resultado: 'ganada', pnl: 6 },
-    { calidad: 92, resultado: 'ganada', pnl: 6 },
-  ]);
-
-  assert.deepEqual(resumen.map(item => ({
-    etiqueta: item.etiqueta,
-    total: item.total,
-    winRate: item.winRate,
-    pnl: item.pnl,
-  })), [
-    { etiqueta: '<70', total: 1, winRate: 0, pnl: -4 },
-    { etiqueta: '70–79', total: 2, winRate: 50, pnl: 2 },
-    { etiqueta: '80–89', total: 1, winRate: 100, pnl: 6 },
-    { etiqueta: '90–100', total: 1, winRate: 100, pnl: 6 },
-  ]);
-});
-
-test('la comparativa histórica respeta cada umbral sobre la misma muestra', async () => {
-  const { ejecutarComparativaBacktest } = await cargarModulo(
-    path.join(__dirname, '../trading/backtestEngine.js'),
-  );
-  const ticks = Array.from({ length: 600 }, (_, index) => ({
-    epoch: index + 1,
-    precio: 100
-      + Math.sin(index / 8) * 4
-      + Math.sin(index / 2) * 0.6,
-  }));
-  const resultado = ejecutarComparativaBacktest({
-    ticks,
-    periodo: 14,
-    stake: 20,
-    saldoInicial: 10000,
-    confirmacionesRequeridas: 3,
-    umbralSeleccionado: 70,
-  });
-
-  assert.deepEqual(
-    resultado.comparativa.map(item => item.umbralMinimo),
-    [null, 70, 80, 90],
-  );
-  resultado.comparativa
-    .filter(item => item.umbralMinimo !== null)
-    .forEach(item => {
-      assert.ok(item.operaciones.every(
-        operacion => operacion.calidad >= item.umbralMinimo,
-      ));
-    });
-  assert.equal(
-    resultado.calidad.reduce((total, grupo) => total + grupo.total, 0),
-    resultado.comparativa[0].total,
-  );
-});
-
-test('la calibración recomienda el mejor equilibrio con muestra suficiente', async () => {
-  const { recomendarCalibracion } = await cargarModulo(
-    path.join(__dirname, '../trading/marketCalibration.js'),
-  );
-  const recomendacion = recomendarCalibracion([
-    { umbralMinimo: null, total: 20, winRate: 50, pnl: 20, maxDrawdown: 30 },
-    { umbralMinimo: 70, total: 10, winRate: 60, pnl: 30, maxDrawdown: 20 },
-    { umbralMinimo: 80, total: 7, winRate: 71, pnl: 28, maxDrawdown: 10 },
-    { umbralMinimo: 90, total: 2, winRate: 100, pnl: 20, maxDrawdown: 0 },
-  ], { confirmacionesRequeridas: 3, minimoOperaciones: 3 });
-
-  assert.equal(recomendacion.disponible, true);
-  assert.equal(recomendacion.umbralMinimo, 80);
-  assert.equal(recomendacion.confirmacionesRequeridas, 3);
-});
-
-test('la calibración no recomienda resultados con muestra insuficiente', async () => {
-  const { recomendarCalibracion } = await cargarModulo(
-    path.join(__dirname, '../trading/marketCalibration.js'),
-  );
-  const recomendacion = recomendarCalibracion([
-    { umbralMinimo: 70, total: 1, winRate: 100, pnl: 10, maxDrawdown: 0 },
-    { umbralMinimo: 80, total: 2, winRate: 100, pnl: 20, maxDrawdown: 0 },
-  ]);
-
-  assert.equal(recomendacion.disponible, false);
-});
-
-test('las calibraciones se guardan y consultan por mercado independiente', async () => {
-  const { createMarketCalibrationStore } = await cargarModulo(
-    path.join(__dirname, '../trading/marketCalibration.js'),
-  );
-  const datos = new Map();
-  const store = createMarketCalibrationStore({
-    storageKey: 'calibraciones',
-    storage: {
-      getItem: key => datos.get(key) || null,
-      setItem: (key, value) => datos.set(key, value),
-    },
-  });
-
-  store.cargar();
-  store.establecer('BOOM500', { umbralMinimo: 80, confirmacionesRequeridas: 3 });
-  store.establecer('CRASH500', { umbralMinimo: 90, confirmacionesRequeridas: 4 });
-
-  assert.equal(store.obtener('BOOM500').umbralMinimo, 80);
-  assert.equal(store.obtener('CRASH500').umbralMinimo, 90);
-  store.eliminar('BOOM500');
-  assert.equal(store.obtener('BOOM500'), null);
-  assert.equal(store.obtener('CRASH500').confirmacionesRequeridas, 4);
-});
-
 test('el panel automático explica calidad, confirmaciones y cooldown', async () => {
   const { determinarEstadoAutomatico } = await cargarModulo(
     path.join(__dirname, '../components/autoStatus.js'),
@@ -1003,7 +890,7 @@ test('el ranking prioriza un mercado estable con mejor señal e historial', asyn
       precio: 100,
       desviacion: 0.1,
       calidad: 80,
-      calibracion: { umbralMinimo: 75 },
+      signalConfig: { umbralMinimo: 75 },
       registros,
     },
   ]);

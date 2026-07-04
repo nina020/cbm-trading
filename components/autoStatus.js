@@ -59,7 +59,6 @@ export function renderAutoStatus(contenedor, datos) {
   if (!contenedor) return;
   const estado = determinarEstadoAutomatico(datos);
   const config = datos.config;
-  const calibracion = datos.calibrado ? 'Calibración del mercado' : 'Configuración global';
 
   contenedor.className = `auto-status auto-status-${estado.codigo}`;
   contenedor.innerHTML = `
@@ -74,6 +73,5 @@ export function renderAutoStatus(contenedor, datos) {
       <div><small>Cooldown</small><b>${datos.cooldownRestante || 0}s</b></div>
     </div>
     <div class="auto-status-reason">${estado.motivo}</div>
-    <div class="auto-status-source">${calibracion}</div>
   `;
 }

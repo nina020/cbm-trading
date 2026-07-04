@@ -32,7 +32,6 @@ export function evaluarMercadoParaInicio({
   precio,
   desviacion,
   calidad = 0,
-  calibracion = null,
   signalConfig = null,
   estrategia = null,
   registros = [],
@@ -52,8 +51,7 @@ export function evaluarMercadoParaInicio({
   const puntosHistorial = historial.winRate === null
     ? 0
     : (historial.winRate / 100) * confianzaMuestra * 15;
-  const puntosCalibracion = calibracion ? 10 : 0;
-  const umbralMinimo = Number(calibracion?.umbralMinimo ?? signalConfig?.umbralMinimo);
+  const umbralMinimo = Number(signalConfig?.umbralMinimo);
   const ajusteUmbral = Number.isFinite(umbralMinimo)
     ? (Number(calidad) >= umbralMinimo
       ? 5
@@ -67,7 +65,6 @@ export function evaluarMercadoParaInicio({
     + puntosEstabilidad
     + puntosCalidad
     + puntosHistorial
-    + puntosCalibracion
     + ajusteUmbral
     + ajusteEstrategia,
   );
@@ -88,7 +85,6 @@ export function evaluarMercadoParaInicio({
     nivel,
     calidad: Number(calidad) || 0,
     volatilidadRelativa,
-    calibrado: Boolean(calibracion),
     umbralMinimo: Number.isFinite(umbralMinimo) ? umbralMinimo : null,
     estrategia: estrategia ? {
       permitido: estrategia.permitido,

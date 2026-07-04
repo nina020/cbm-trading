@@ -65,11 +65,9 @@ comprobación de salud en `/health`.
 Cuando `DATABASE_URL` está disponible, el servidor crea la tabla `app_state` y
 sincroniza estas claves:
 
-- Historial de señales.
 - Registro de ejecuciones.
 - Posiciones simuladas.
 - Calidad de señales.
-- Calibraciones por mercado.
 - Límites globales de riesgo.
 
 En desarrollo local, si no hay `DATABASE_URL`, se usa `.data/cloud-state.json`
