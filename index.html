@@ -347,7 +347,6 @@ table.history-table tr:last-child td { border-bottom: none; }
     <button class="side-link primary" onclick="navegarA('markets')">Trading</button>
     <button class="side-link" onclick="actualizarMercadosTop()">Mercados top</button>
     <button class="side-link" onclick="abrirPosiciones()">Posiciones</button>
-    <button class="side-link" onclick="abrirHistorial()">Historial</button>
     <button class="side-link" onclick="alternarRegistroEjecuciones()">Ejecuciones</button>
     <button class="side-link" onclick="abrirBacktesting()">Backtesting</button>
     <button class="side-link" onclick="abrirEvaluacionSemanal()">Evaluación</button>
@@ -599,42 +598,6 @@ table.history-table tr:last-child td { border-bottom: none; }
         <div class="positions-group-title">Simulación segura</div>
         <div id="simulated-positions"></div>
       </div>
-    </div>
-  </div>
-</div>
-
-<div class="modal-overlay" id="modal-overlay" onclick="cerrarHistorialClick(event)">
-  <div class="modal-content">
-    <div class="modal-header">
-      <h2>Historial detallado de señales</h2>
-      <button class="modal-close" onclick="cerrarHistorial()">✕ Cerrar</button>
-    </div>
-    <div class="filter-row" aria-label="Filtros de historial">
-      <button class="filter-chip active" data-history-filter="todos" onclick="cambiarFiltroHistorial('todos')">Todos</button>
-      <button class="filter-chip" data-history-filter="BUY" onclick="cambiarFiltroHistorial('BUY')">BUY</button>
-      <button class="filter-chip" data-history-filter="SELL" onclick="cambiarFiltroHistorial('SELL')">SELL</button>
-      <button class="filter-chip" data-history-filter="ganada" onclick="cambiarFiltroHistorial('ganada')">Ganadas</button>
-      <button class="filter-chip" data-history-filter="perdida" onclick="cambiarFiltroHistorial('perdida')">Perdidas</button>
-      <button class="filter-chip" data-history-filter="pendiente" onclick="cambiarFiltroHistorial('pendiente')">Pendientes</button>
-    </div>
-    <div class="history-table-wrap">
-      <table class="history-table" id="history-table" style="display:none">
-        <thead>
-          <tr>
-            <th>Hora</th>
-            <th>Mercado</th>
-            <th>Tipo</th>
-            <th>Entrada</th>
-            <th>SL</th>
-            <th>TP</th>
-            <th>Inversión</th>
-            <th>Resultado</th>
-            <th>P&L</th>
-          </tr>
-        </thead>
-        <tbody id="history-body"></tbody>
-      </table>
-      <div class="history-empty" id="history-empty">Aún no se han generado señales BUY/SELL.</div>
     </div>
   </div>
 </div>

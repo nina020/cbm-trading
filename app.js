@@ -1,6 +1,6 @@
 import {
-  INTERVALO_VELA, MAX_HISTORIAL_VISIBLE, RATIO_RECOMPENSA, MULTIPLICADOR_DEFAULT,
-  STORAGE_KEY, SIM_STORAGE_KEY,
+  INTERVALO_VELA, RATIO_RECOMPENSA, MULTIPLICADOR_DEFAULT,
+  SIM_STORAGE_KEY,
   EXECUTION_STORAGE_KEY, SIGNAL_CONFIG_STORAGE_KEY, STRATEGY_CONFIG_STORAGE_KEY,
   MARKET_CALIBRATION_STORAGE_KEY,
   GLOBAL_RISK_STORAGE_KEY, ORDER_AUDIT_STORAGE_KEY, NOMBRES_SIMBOLOS, MERCADOS_ESTABLES, TEMAS,
@@ -13,7 +13,7 @@ import {
   solicitarContratoEstado, cerrarContrato,
 } from './services/websocketService.js';
 import {
-  createRiskManager, calcularObjetivosMonetarios, evaluarSalidaPorPrecio,
+  createRiskManager, calcularObjetivosMonetarios,
 } from './trading/riskManager.js';
 import { createSimulationEngine } from './trading/simulationEngine.js';
 import { createAutoTrader } from './trading/autoTrader.js';
@@ -50,8 +50,6 @@ import { evaluarCandidatoCanasta, seleccionarMercadosCanasta } from './trading/b
 let mercadosActivos = {};
 let mercadosEscaneados = [];
 let actualizacionRankingEnCurso = false;
-let historial = [];
-let historialId = 0;
 let modoEjecucion = 'simulacion';
 const REAL_CONTROLADO_MAX_STAKE = 2;
 const FEE_REVIEW_INTERVAL_SECONDS = 30 * 60;
@@ -80,7 +78,6 @@ const estadosAutomaticos = {};
 const notificacionesOportunidad = {};
 let oportunidadFueraHorario = null;
 let filtroEjecuciones = 'todos';
-let filtroHistorial = 'todos';
 const riskManager = createRiskManager({ saldoInicial: saldoReal });
 const marketCalibrationStore = createMarketCalibrationStore({
   storageKey: MARKET_CALIBRATION_STORAGE_KEY,
@@ -90,7 +87,6 @@ const globalRiskManager = createGlobalRiskManager({
 });
 
 const cloudSyncReady = iniciarSincronizacionCloud([
-  STORAGE_KEY,
   SIM_STORAGE_KEY,
   EXECUTION_STORAGE_KEY,
   SIGNAL_CONFIG_STORAGE_KEY,
@@ -128,22 +124,6 @@ function cambiarFiltroEjecuciones(filtro) {
     btn.classList.toggle('active', btn.dataset.executionFilter === filtro);
   });
   renderRegistroEjecuciones(executionJournal.registros);
-}
-
-function filtrarHistorial(registros) {
-  if (filtroHistorial === 'todos') return registros;
-  if (['BUY', 'SELL'].includes(filtroHistorial)) {
-    return registros.filter(item => item.tipo === filtroHistorial);
-  }
-  return registros.filter(item => item.estado === filtroHistorial);
-}
-
-function cambiarFiltroHistorial(filtro) {
-  filtroHistorial = filtro;
-  document.querySelectorAll('[data-history-filter]').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.historyFilter === filtro);
-  });
-  renderHistorial();
 }
 
 function navegarA(id) {
@@ -1193,46 +1173,6 @@ function revisarSaludMercados() {
   renderProductionHealth();
 }
 
-function abrirHistorial() {
-  document.getElementById('modal-overlay').style.display = 'flex';
-}
-
-function cerrarHistorial() {
-  document.getElementById('modal-overlay').style.display = 'none';
-}
-
-function cerrarHistorialClick(event) {
-  if (event.target.id === 'modal-overlay') cerrarHistorial();
-}
-
-function guardarHistorial() {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ historial, historialId }));
-  } catch (e) {
-    console.error('No se pudo guardar el historial:', e);
-  }
-}
-
-function cargarHistorialGuardado() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return;
-    const data = JSON.parse(raw);
-    if (Array.isArray(data.historial)) historial = data.historial;
-    if (typeof data.historialId === 'number') historialId = data.historialId;
-  } catch (e) {
-    console.error('No se pudo cargar el historial guardado:', e);
-  }
-}
-
-function limpiarHistorial() {
-  if (!confirm('¿Borrar todo el historial de señales guardado? Esta acción no se puede deshacer.')) return;
-  historial = [];
-  historialId = 0;
-  localStorage.removeItem(STORAGE_KEY);
-  renderHistorial();
-}
-
 function registrarLogAuto(mensaje, tipo) {
   const aviso = document.getElementById('execution-notice');
   aviso.textContent = mensaje;
@@ -2007,86 +1947,6 @@ function etiquetaModoOperacion() {
   return 'Simulación segura';
 }
 
-function registrarSenal(mercadoId, nombre, tipo, hora, entrada, sl, tp) {
-  historialId++;
-  const stake = calcularInversionSugerida();
-  historial.unshift({
-    id: historialId,
-    mercadoId,
-    nombre,
-    tipo,
-    hora,
-    entrada,
-    sl,
-    tp,
-    stake,
-    estado: 'pendiente',
-    horaResultado: null,
-    pnl: null
-  });
-  renderHistorial();
-}
-
-function revisarPendientes(mercadoId, precio, hora) {
-  let cambios = false;
-  historial.forEach(h => {
-    if (h.mercadoId !== mercadoId || h.estado !== 'pendiente') return;
-    const salida = evaluarSalidaPorPrecio({ ...h, precio });
-    if (!salida) return;
-
-    const objetivos = calcularObjetivosMonetarios(h.stake);
-    h.estado = salida === 'take_profit' ? 'ganada' : 'perdida';
-    h.horaResultado = hora;
-    h.pnl = salida === 'take_profit' ? objetivos.objetivo : -objetivos.riesgo;
-    cambios = true;
-  });
-  if (cambios) renderHistorial();
-}
-
-function renderHistorial() {
-  const tabla = document.getElementById('history-table');
-  const tbody = document.getElementById('history-body');
-  const vacio = document.getElementById('history-empty');
-  const historialFiltrado = filtrarHistorial(historial);
-
-  if (historialFiltrado.length === 0) {
-    tabla.style.display = 'none';
-    vacio.style.display = 'block';
-    vacio.textContent = historial.length === 0
-      ? 'Aún no se han generado señales BUY/SELL.'
-      : 'No hay señales que coincidan con este filtro.';
-  } else {
-    tabla.style.display = 'table';
-    vacio.style.display = 'none';
-
-    tbody.innerHTML = historialFiltrado.slice(0, MAX_HISTORIAL_VISIBLE).map(h => {
-      const tagTipo = h.tipo === 'BUY' ? 'tag-buy' : 'tag-sell';
-      const tagEstado = `tag-${h.estado}`;
-      const estadoTexto = h.estado === 'pendiente' ? '⏳ Pendiente'
-        : h.estado === 'ganada' ? `✅ Ganada (${h.horaResultado})`
-        : `❌ Perdida (${h.horaResultado})`;
-      const pnlTexto = h.pnl === null ? '—'
-        : (h.pnl >= 0 ? '+$' + h.pnl.toFixed(2) : '-$' + Math.abs(h.pnl).toFixed(2));
-      const pnlColor = h.pnl === null ? 'var(--text-faint)' : (h.pnl >= 0 ? '#26a69a' : '#ef5350');
-      return `
-        <tr>
-          <td>${h.hora}</td>
-          <td>${h.nombre}</td>
-          <td><span class="tag ${tagTipo}">${h.tipo}</span></td>
-          <td>${h.entrada.toFixed(2)}</td>
-          <td>${h.sl.toFixed(2)}</td>
-          <td>${h.tp.toFixed(2)}</td>
-          <td>$${h.stake.toFixed(2)}</td>
-          <td><span class="tag ${tagEstado}">${estadoTexto}</span></td>
-          <td style="color:${pnlColor}; font-weight:600">${pnlTexto}</td>
-        </tr>
-      `;
-    }).join('');
-  }
-
-  guardarHistorial();
-}
-
 function crearTarjeta(id, nombre, perfil, periodo) {
   document.getElementById('empty').style.display = 'none';
   return createMarketCard({ id, nombre, perfil, periodo, chartTheme: TEMAS[temaActual()] });
@@ -2300,7 +2160,6 @@ async function agregarMercado(mercadoId = null, opciones = {}) {
         }
         candleSeries.update(velaActual);
 
-        revisarPendientes(id, precio, hora);
         actualizarPosicionesSimuladas(id, precio);
 
         if (precios.length < periodo) return;
@@ -2325,10 +2184,6 @@ async function agregarMercado(mercadoId = null, opciones = {}) {
         const tipoSenal = resultadoSenal.tipo;
         const sl = tipoSenal === 'BUY' ? precio - desv * 2 : precio + desv * 2;
         const tp = tipoSenal === 'BUY' ? precio + desv * 3 : precio - desv * 3;
-
-        if (tipoSenal !== 'WAIT' && tipoSenal !== ultimaSenal) {
-          registrarSenal(id, nombre, tipoSenal, hora, precio, sl, tp);
-        }
 
         const configMercado = obtenerSignalConfigMercado(id);
         const reglasEstrategia = evaluarReglasEstrategia({
@@ -2575,7 +2430,6 @@ Object.assign(window, {
   navegarA,
   actualizarMercadosTop,
   cambiarFiltroEjecuciones,
-  cambiarFiltroHistorial,
   limpiarRegistroEjecuciones,
   limpiarAuditoriaOrdenes,
   alternarRegistroEjecuciones,
@@ -2589,10 +2443,6 @@ Object.assign(window, {
   reconciliarConDeriv,
   ejecutarBacktestActual,
   aplicarCalibracionBacktest,
-  abrirHistorial,
-  cerrarHistorial,
-  cerrarHistorialClick,
-  limpiarHistorial,
   toggleAutoMercado,
   prepararCanastaDemoAutomatica,
   cargarPortfolio,
@@ -2610,7 +2460,6 @@ async function iniciarApp() {
   globalRiskManager.cargar();
   cargarSignalConfig();
   cargarStrategyConfig();
-  cargarHistorialGuardado();
   renderResumenEjecuciones([]);
   executionJournal.cargar();
   orderAudit.cargar();
@@ -2621,7 +2470,6 @@ async function iniciarApp() {
   setInterval(actualizarContadoresPosiciones, 1000);
   renderProductionHealth();
   renderAlertasProduccion();
-  renderHistorial();
   cargarPortfolio();
   actualizarRankingAutomatico();
   setInterval(actualizarRankingAutomatico, MARKET_RANKING_REFRESH_MS);
