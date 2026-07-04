@@ -1,4 +1,4 @@
-import { obtenerWsUrl } from '../services/derivApi.js';
+import { obtenerWsUrl, obtenerCuenta } from '../services/derivApi.js';
 import { crearWebSocket, enviarProposal, comprarProposal } from '../services/websocketService.js';
 import { MULTIPLICADOR_DEFAULT } from '../config.js';
 import { calcularObjetivosMonetarios } from './riskManager.js';
@@ -50,7 +50,7 @@ export function normalizarCotizacion(propuesta, multiplicador) {
 }
 
 export function crearPayload({
-  mercadoId, contractType, stake, entrada, sl, tp, multiplicador, limitesMinimos = {},
+  mercadoId, contractType, stake, entrada, sl, tp, multiplicador, limitesMinimos = {}, currency = 'USD',
 }) {
   const stakeRedondeado = redondearMonto(stake);
   const { riesgo: riesgoMonetario, objetivo: objetivoMonetario } = calcularObjetivosMonetarios(stakeRedondeado);
@@ -60,7 +60,7 @@ export function crearPayload({
     amount: stakeRedondeado,
     basis: 'stake',
     contract_type: contractType,
-    currency: 'USD',
+    currency,
     multiplier: multiplicador,
     underlying_symbol: mercadoId,
     limit_order: {
@@ -79,7 +79,11 @@ async function procesarOrden({
   tp,
   accountMode = 'demo',
 }, comprar, { confirmarCotizacion } = {}) {
-  const wsUrl = await obtenerWsUrl(accountMode);
+  const [wsUrl, cuenta] = await Promise.all([
+    obtenerWsUrl(accountMode),
+    obtenerCuenta(accountMode),
+  ]);
+  const currency = cuenta?.currency || 'USD';
   const contractType = tipo === 'BUY' ? 'MULTUP' : 'MULTDOWN';
 
   return new Promise((resolve, reject) => {
@@ -92,7 +96,7 @@ async function procesarOrden({
 
     function solicitarProposal(socket) {
       enviarProposal(socket, crearPayload({
-        mercadoId, contractType, stake, entrada, sl, tp, multiplicador, limitesMinimos,
+        mercadoId, contractType, stake, entrada, sl, tp, multiplicador, limitesMinimos, currency,
       }));
     }
 

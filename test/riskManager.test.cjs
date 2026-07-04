@@ -243,6 +243,24 @@ test('la orden demo redondea montos a 2 decimales para Deriv', async () => {
   assert.equal(payload.limit_order.take_profit, 44.99);
 });
 
+test('la orden usa la moneda de la cuenta y USD solo como respaldo', async () => {
+  const { crearPayload } = await cargarModulo(
+    path.join(__dirname, '../trading/orderService.js'),
+  );
+  const base = {
+    mercadoId: 'TEST',
+    contractType: 'MULTUP',
+    stake: 20,
+    entrada: 100,
+    sl: 99,
+    tp: 101.5,
+    multiplicador: 100,
+  };
+
+  assert.equal(crearPayload({ ...base, currency: 'EUR' }).currency, 'EUR');
+  assert.equal(crearPayload(base).currency, 'USD');
+});
+
 test('la cotización conserva multiplicador y solo suma costos explícitos', async () => {
   const { normalizarCotizacion, extraerCostosReportados } = await cargarModulo(
     path.join(__dirname, '../trading/orderService.js'),

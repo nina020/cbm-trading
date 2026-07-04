@@ -390,9 +390,30 @@ async function resolverCuentaDeriv(credenciales) {
     token: credenciales.token,
   });
   const accounts = Array.isArray(data.data) ? data.data : [];
-  const account = accounts.find(item => (
+  const exacta = accounts.find(item => (
     normalizarAccountId(item.account_id) === credenciales.accountId
-  )) || accounts.find(item => accountTypeMatches(item, credenciales.modo));
+  ));
+
+  if (credenciales.modo === 'real') {
+    if (!exacta) {
+      const error = new Error(
+        `Ninguna cuenta del token coincide exactamente con DERIV_REAL_ACCOUNT_ID (${credenciales.accountId}). `
+        + 'Por seguridad no se elige otra cuenta automáticamente en modo real.',
+      );
+      error.statusCode = 404;
+      throw error;
+    }
+    if (!accountTypeMatches(exacta, 'real')) {
+      const error = new Error(
+        `La cuenta configurada en DERIV_REAL_ACCOUNT_ID (${credenciales.accountId}) no es una cuenta real.`,
+      );
+      error.statusCode = 400;
+      throw error;
+    }
+    return exacta;
+  }
+
+  const account = exacta || accounts.find(item => accountTypeMatches(item, credenciales.modo));
 
   if (!account) {
     const error = new Error(`No se encontró una cuenta ${credenciales.modo} disponible para este token`);
