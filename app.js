@@ -2454,8 +2454,16 @@ Object.assign(window, {
   quitarMercado,
 });
 
+function limpiarHistorialHuerfano() {
+  // El historial de señales se eliminó de la app; purga los datos que
+  // quedaron guardados en este navegador y en la nube.
+  localStorage.removeItem('cbm_historial_v1');
+  fetch('/api/state/cbm_historial_v1', { method: 'DELETE' }).catch(() => {});
+}
+
 async function iniciarApp() {
   await cloudSyncReady;
+  limpiarHistorialHuerfano();
   marketCalibrationStore.cargar();
   globalRiskManager.cargar();
   cargarSignalConfig();

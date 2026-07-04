@@ -8,9 +8,15 @@ function puntosPerfil(perfil) {
   return 4;
 }
 
+// Solo operaciones realmente enviadas a Deriv (demo o real);
+// las simulaciones internas no cuentan para el ranking.
+const MODOS_DERIV = new Set(['demo', 'real']);
+
 function resumirHistorial(registros, mercadoId) {
   const cerradas = registros.filter(
-    item => item.mercadoId === mercadoId && item.estado !== 'pendiente',
+    item => MODOS_DERIV.has(item.modo)
+      && item.mercadoId === mercadoId
+      && item.estado !== 'pendiente',
   );
   const ganadas = cerradas.filter(item => item.estado === 'ganada').length;
   return {

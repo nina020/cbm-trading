@@ -983,6 +983,7 @@ test('el ranking prioriza un mercado estable con mejor señal e historial', asyn
   );
   const registros = Array.from({ length: 10 }, (_, index) => ({
     mercadoId: 'ESTABLE',
+    modo: 'demo',
     estado: index < 7 ? 'ganada' : 'perdida',
   }));
   const ranking = ordenarMercadosParaInicio([
@@ -1027,12 +1028,13 @@ test('el ranking reduce el peso de historiales pequeños y espera datos de preci
   };
   const unaGanada = evaluarMercadoParaInicio({
     ...base,
-    registros: [{ mercadoId: 'TEST', estado: 'ganada' }],
+    registros: [{ mercadoId: 'TEST', modo: 'demo', estado: 'ganada' }],
   });
   const veinteGanadas = evaluarMercadoParaInicio({
     ...base,
     registros: Array.from({ length: 20 }, () => ({
       mercadoId: 'TEST',
+      modo: 'demo',
       estado: 'ganada',
     })),
   });
@@ -1045,6 +1047,30 @@ test('el ranking reduce el peso de historiales pequeños y espera datos de preci
   assert.ok(veinteGanadas.puntuacion > unaGanada.puntuacion);
   assert.equal(sinPrecio.listo, false);
   assert.equal(sinPrecio.nivel, 'recopilando');
+});
+
+test('el ranking solo cuenta operaciones enviadas a Deriv, no simulaciones', async () => {
+  const { evaluarMercadoParaInicio } = await cargarModulo(
+    path.join(__dirname, '../trading/marketRanking.js'),
+  );
+  const resultado = evaluarMercadoParaInicio({
+    id: 'TEST',
+    nombre: 'Prueba',
+    perfil: 'media',
+    precio: 100,
+    desviacion: 0.2,
+    calidad: 70,
+    registros: [
+      { mercadoId: 'TEST', modo: 'demo', estado: 'ganada' },
+      { mercadoId: 'TEST', modo: 'real', estado: 'perdida' },
+      { mercadoId: 'TEST', modo: 'simulacion', estado: 'ganada' },
+      { mercadoId: 'TEST', modo: 'simulacion', estado: 'ganada' },
+      { mercadoId: 'TEST', estado: 'ganada' },
+    ],
+  });
+
+  assert.equal(resultado.historial.total, 2);
+  assert.equal(resultado.historial.winRate, 50);
 });
 
 test('el ranking ajusta la recomendación por umbral y estado operativo', async () => {
