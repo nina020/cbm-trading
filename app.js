@@ -446,7 +446,7 @@ function validarAperturaPorRiesgo(riesgoOperacion, mercadoId = null) {
 }
 
 function temaActual() {
-  return document.body.dataset.theme === 'light' ? 'light' : 'dark';
+  return document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
 }
 
 function actualizarIndicadorModo() {
@@ -462,7 +462,7 @@ function actualizarIndicadorModo() {
 function toggleTheme() {
   const actual = temaActual();
   const nuevo = actual === 'dark' ? 'light' : 'dark';
-  document.body.dataset.theme = nuevo;
+  document.documentElement.dataset.theme = nuevo;
   document.getElementById('theme-toggle').textContent = nuevo === 'dark' ? '🌙 Oscuro' : '☀️ Claro';
 
   const t = TEMAS[nuevo];
