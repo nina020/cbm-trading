@@ -45,7 +45,8 @@
   --shadow: 0 18px 50px rgba(11,31,58,.12);
 }
 
-body { background: var(--bg-page); color: var(--text-primary); transition: background .2s, color .2s; }
+html { overflow-x: hidden; }
+body { background: var(--bg-page); color: var(--text-primary); transition: background .2s, color .2s; overflow-x: hidden; }
 .app-layout { min-height: 100vh; display: grid; grid-template-columns: 230px minmax(0, 1fr); }
 .sidebar { position: sticky; top: 0; height: 100vh; background: linear-gradient(180deg, var(--bg-panel), var(--bg-page)); border-right: 1px solid var(--border); padding: 18px 14px; display: flex; flex-direction: column; gap: 18px; z-index: 900; }
 .sidebar-brand { padding: 4px 6px 14px; border-bottom: 1px solid var(--border); }
@@ -66,7 +67,7 @@ body { background: var(--bg-page); color: var(--text-primary); transition: backg
 .header-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .balance-info { font-size: 12px; display: flex; align-items: center; gap: 8px; color: var(--text-secondary); background: var(--bg-stat); border: 1px solid var(--border); border-radius: 999px; padding: 7px 10px; }
 .balance-value { font-weight: 600; color: #16a06a; font-size: 14px; }
-.header-invest-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.header-invest-controls { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; padding: 4px; border: 1px solid var(--border); border-radius: 999px; background: var(--bg-stat); }
 .account-mode-pill { font-size: 12px; border: 1px solid var(--border); border-radius: 999px; padding: 0; background: var(--bg-stat); color: var(--text-secondary); overflow: hidden; display: flex; align-items: center; }
 .account-mode-pill select { width: 100%; min-width: 176px; border: 0; background: transparent; color: inherit; font: inherit; font-weight: 600; padding: 7px 30px 7px 11px; outline: none; cursor: pointer; }
 .account-mode-pill.mode-real { color: var(--danger); border-color: rgba(239,83,80,.45); background: rgba(239,83,80,.1); }
@@ -75,7 +76,7 @@ body { background: var(--bg-page); color: var(--text-primary); transition: backg
 .theme-toggle:hover { border-color: #16a06a; }
 
 .summary-bar { margin: 16px 18px 0; background: var(--bg-panel); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 14px; display: flex; flex-direction: column; gap: 12px; box-shadow: var(--shadow); }
-.summary-stats { display: grid; grid-template-columns: repeat(4, minmax(112px, 1fr)); gap: 10px; }
+.summary-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
 .summary-stat { background: var(--bg-stat); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 9px 10px; text-align: center; }
 .summary-stat-label { font-size: 10px; color: var(--text-faint); }
 .summary-stat-value { font-size: 17px; font-weight: 600; margin-top: 2px; }
@@ -100,14 +101,18 @@ body { background: var(--bg-page); color: var(--text-primary); transition: backg
 .config-group { display: flex; flex-direction: column; gap: 4px; }
 .config-group label { font-size: 11px; color: var(--text-secondary); white-space: nowrap; }
 .config-group select, .config-group input[type="number"], .config-group input[type="time"] { padding: 7px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; background: var(--bg-stat); color: var(--text-primary); }
-.config-group.market select { width: 200px; }
-.config-group.period select { width: 150px; }
+.config-group.market select { width: min(100%, 200px); }
+.config-group.period select { width: min(100%, 150px); }
 .config-group.num input { width: 80px; }
 
-.invest-mode { display: flex; align-items: center; gap: 8px; }
-.invest-mode label.radio-label { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--text-secondary); white-space: nowrap; cursor: pointer; }
-.invest-mode input[type="number"] { width: 75px; padding: 7px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; background: var(--bg-stat); color: var(--text-primary); }
-.invest-mode input[type="number"]:disabled { opacity: 0.35; cursor: not-allowed; }
+.invest-mode { display: flex; align-items: center; gap: 7px; min-height: 34px; padding: 4px 5px 4px 9px; border: 1px solid transparent; border-radius: 999px; background: transparent; transition: background .18s, border-color .18s, box-shadow .18s; }
+.invest-mode:has(input[type="radio"]:checked) { background: var(--bg-panel); border-color: rgba(22,160,106,.4); box-shadow: 0 8px 22px rgba(11,31,58,.08); }
+.invest-mode label.radio-label { display: flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; color: var(--text-secondary); white-space: nowrap; cursor: pointer; }
+.invest-mode:has(input[type="radio"]:checked) label.radio-label { color: var(--text-primary); }
+.invest-mode input[type="radio"] { width: 13px; height: 13px; accent-color: var(--accent); cursor: pointer; }
+.invest-mode input[type="number"] { width: 66px; min-height: 28px; padding: 5px 7px; border: 1px solid var(--border); border-radius: 999px; font-size: 13px; text-align: center; background: var(--bg-stat); color: var(--text-primary); outline: none; }
+.invest-mode input[type="number"]:focus { border-color: rgba(22,160,106,.75); box-shadow: 0 0 0 3px rgba(22,160,106,.14); }
+.invest-mode input[type="number"]:disabled { opacity: 0.38; cursor: not-allowed; background: transparent; }
 
 .btn-add { background: #16a06a; color: #fff; border: none; border-radius: 8px; padding: 0 18px; height: 34px; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
 .btn-add:hover { background: #127a57; }
@@ -186,7 +191,7 @@ body { background: var(--bg-page); color: var(--text-primary); transition: backg
 .btn-close:hover { background: rgba(239,83,80,0.2); }
 .positions-empty { padding: 16px; text-align: center; color: var(--text-faint); font-size: 13px; background: var(--bg-panel); border: 1px solid var(--border); border-radius: 8px; }
 
-.markets { padding: 16px 18px 22px; display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px; align-items: start; scroll-margin-top: 90px; }
+.markets { padding: 16px 18px 22px; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 12px; align-items: start; scroll-margin-top: 90px; }
 .empty { grid-column: 1 / -1; text-align: center; padding: 40px; color: var(--text-faint); font-size: 14px; }
 .card { background: var(--bg-panel); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 12px; box-shadow: 0 10px 30px rgba(0,0,0,.1); }
 .card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
@@ -347,6 +352,10 @@ table.history-table tr:last-child td { border-bottom: none; }
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 8px;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
   }
   .account-mode-pill, .theme-toggle, .status {
     width: 100%;
@@ -366,10 +375,15 @@ table.history-table tr:last-child td { border-bottom: none; }
   .invest-mode {
     min-height: 42px;
     border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 7px;
+    border-radius: 14px;
+    padding: 8px;
     background: var(--bg-stat);
     justify-content: space-between;
+  }
+  .invest-mode:has(input[type="radio"]:checked) {
+    background: rgba(22,160,106,.1);
+    border-color: rgba(22,160,106,.45);
+    box-shadow: none;
   }
   .invest-mode input[type="number"] { width: 92px; }
   .divider { display: none; }
@@ -507,17 +521,17 @@ table.history-table tr:last-child td { border-bottom: none; }
     <div class="header-invest-controls">
       <div class="invest-mode">
         <label class="radio-label">
-          <input type="radio" name="modo-inversion" value="porcentaje" checked onchange="cambiarModoInversion('porcentaje')">
+          <input type="radio" name="modo-inversion" value="porcentaje" onchange="cambiarModoInversion('porcentaje')">
           % del saldo
         </label>
-        <input type="number" id="risk-input" value="1" min="0.1" max="10" step="0.1" onchange="actualizarRiesgoPorcentaje(this.value)">
+        <input type="number" id="risk-input" value="1" min="0.1" max="10" step="0.1" disabled onchange="actualizarRiesgoPorcentaje(this.value)">
       </div>
       <div class="invest-mode">
         <label class="radio-label">
-          <input type="radio" name="modo-inversion" value="fijo" onchange="cambiarModoInversion('fijo')">
+          <input type="radio" name="modo-inversion" value="fijo" checked onchange="cambiarModoInversion('fijo')">
           Monto fijo ($)
         </label>
-        <input type="number" id="fixed-input" value="10" min="1" step="1" disabled oninput="actualizarMontoFijo(this.value)">
+        <input type="number" id="fixed-input" value="1" min="1" step="1" oninput="actualizarMontoFijo(this.value)">
       </div>
     </div>
     <div class="status">

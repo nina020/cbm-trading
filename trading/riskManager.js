@@ -11,16 +11,16 @@ export function calcularObjetivosMonetarios(stake) {
 }
 
 export function createRiskManager({ saldoInicial = 10000 } = {}) {
-  let modo = 'porcentaje';
+  let modo = 'fijo';
   let porcentaje = 1;
-  let montoFijo = 10;
+  let montoFijo = 1;
   let saldo = saldoInicial;
 
   return {
     setSaldo(value) { saldo = Number(value) || 0; },
     setModo(value) { modo = value === 'fijo' ? 'fijo' : 'porcentaje'; },
     setPorcentaje(value) { porcentaje = Number(value) || 1; },
-    setMontoFijo(value) { montoFijo = Number(value) || 10; },
+    setMontoFijo(value) { montoFijo = Number(value) || 1; },
     calcularInversion() {
       return modo === 'fijo' ? montoFijo : saldo * (porcentaje / 100);
     },
