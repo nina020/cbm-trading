@@ -261,6 +261,34 @@ test('la orden usa la moneda de la cuenta y USD solo como respaldo', async () =>
   assert.equal(crearPayload(base).currency, 'USD');
 });
 
+test('el multiplicador se ajusta para que el stop monetario coincida con el stop de la señal', async () => {
+  const { calcularMultiplicadorObjetivo } = await cargarModulo(
+    path.join(__dirname, '../trading/orderService.js'),
+  );
+
+  // Riesgo 25% del stake con stop a 1 punto desde entrada 100: 0.25 * 100 / 1 = x25.
+  assert.equal(calcularMultiplicadorObjetivo({ entrada: 100, sl: 99 }), 25);
+  // Stop más lejano (más volatilidad) exige multiplicador menor.
+  assert.equal(calcularMultiplicadorObjetivo({ entrada: 100, sl: 95 }), 5);
+  // Stop más cercano (menos volatilidad) exige multiplicador mayor.
+  assert.equal(calcularMultiplicadorObjetivo({ entrada: 100, sl: 99.9 }), 250);
+  // Sin datos válidos se usa el multiplicador por defecto.
+  assert.equal(calcularMultiplicadorObjetivo({ entrada: 100, sl: 100 }), 100);
+  assert.equal(calcularMultiplicadorObjetivo({ entrada: null, sl: 99 }), 100);
+});
+
+test('ante multiplicador fuera de rango se elige el permitido más cercano al objetivo', async () => {
+  const { elegirMultiplicadorPermitido } = await cargarModulo(
+    path.join(__dirname, '../trading/orderService.js'),
+  );
+
+  assert.equal(elegirMultiplicadorPermitido([50, 100, 150, 200], 120), 100);
+  assert.equal(elegirMultiplicadorPermitido([50, 100, 150, 200], 130), 150);
+  assert.equal(elegirMultiplicadorPermitido([100, 200, 300], 25), 100);
+  assert.equal(elegirMultiplicadorPermitido([100, 200, 300], 5000), 300);
+  assert.equal(elegirMultiplicadorPermitido([], 100), null);
+});
+
 test('la cotización conserva multiplicador y solo suma costos explícitos', async () => {
   const { normalizarCotizacion, extraerCostosReportados } = await cargarModulo(
     path.join(__dirname, '../trading/orderService.js'),

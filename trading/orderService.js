@@ -1,7 +1,29 @@
 import { obtenerWsUrl, obtenerCuenta } from '../services/derivApi.js';
 import { crearWebSocket, enviarProposal, comprarProposal } from '../services/websocketService.js';
-import { MULTIPLICADOR_DEFAULT } from '../config.js';
+import { MULTIPLICADOR_DEFAULT, FRACCION_RIESGO_STAKE } from '../config.js';
 import { calcularObjetivosMonetarios } from './riskManager.js';
+
+// Con P&L lineal del multiplicador (pnl = stake * mult * Δprecio / entrada),
+// este multiplicador hace que el stop monetario (25% del stake) se alcance
+// exactamente en la distancia entrada→sl de la señal (2σ), y el take profit
+// (1.5x) en 3σ.
+export function calcularMultiplicadorObjetivo({ entrada, sl }) {
+  const entradaNumero = Number(entrada);
+  const distancia = Math.abs(entradaNumero - Number(sl));
+  if (!Number.isFinite(entradaNumero) || entradaNumero <= 0 || !Number.isFinite(distancia) || distancia <= 0) {
+    return MULTIPLICADOR_DEFAULT;
+  }
+  const objetivo = (FRACCION_RIESGO_STAKE * entradaNumero) / distancia;
+  if (!Number.isFinite(objetivo) || objetivo <= 0) return MULTIPLICADOR_DEFAULT;
+  return Math.max(1, Math.round(objetivo));
+}
+
+export function elegirMultiplicadorPermitido(permitidos, objetivo) {
+  if (!Array.isArray(permitidos) || !permitidos.length) return null;
+  return permitidos.reduce((mejor, valor) => (
+    Math.abs(valor - objetivo) < Math.abs(mejor - objetivo) ? valor : mejor
+  ));
+}
 
 function multiplicadoresPermitidos(error) {
   const raw = error?.code_args?.[0];
@@ -86,8 +108,10 @@ async function procesarOrden({
   const currency = cuenta?.currency || 'USD';
   const contractType = tipo === 'BUY' ? 'MULTUP' : 'MULTDOWN';
 
+  const multiplicadorObjetivo = calcularMultiplicadorObjetivo({ entrada, sl });
+
   return new Promise((resolve, reject) => {
-    let multiplicador = MULTIPLICADOR_DEFAULT;
+    let multiplicador = multiplicadorObjetivo;
     let reintentoMultiplicador = false;
     let cotizacion = null;
     let compraSolicitada = false;
@@ -107,7 +131,7 @@ async function procesarOrden({
           const permitidos = multiplicadoresPermitidos(msg.error);
           if (msg.error.subcode === 'MultiplierOutOfRange' && permitidos.length && !reintentoMultiplicador) {
             reintentoMultiplicador = true;
-            multiplicador = permitidos[0];
+            multiplicador = elegirMultiplicadorPermitido(permitidos, multiplicadorObjetivo) ?? permitidos[0];
             solicitarProposal(ws);
             return;
           }
