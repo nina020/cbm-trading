@@ -458,6 +458,17 @@ function toggleTheme() {
   });
 }
 
+function alternarPanelEstado() {
+  const panel = document.getElementById('summary-details');
+  const boton = document.getElementById('summary-toggle');
+  if (!panel || !boton) return;
+
+  const mostrar = panel.hasAttribute('hidden');
+  panel.toggleAttribute('hidden', !mostrar);
+  boton.setAttribute('aria-expanded', mostrar ? 'true' : 'false');
+  boton.textContent = mostrar ? 'Ocultar estado' : 'Mostrar estado';
+}
+
 function cambiarModoInversion(modo) {
   riskManager.setModo(modo);
   document.getElementById('risk-input').disabled = modo !== 'porcentaje';
@@ -2174,6 +2185,7 @@ function quitarMercado(id) {
 
 Object.assign(window, {
   toggleTheme,
+  alternarPanelEstado,
   cambiarModoInversion,
   cambiarModoEjecucion,
   actualizarRiesgoPorcentaje,

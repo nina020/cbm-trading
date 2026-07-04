@@ -76,6 +76,14 @@ body { background: var(--bg-page); color: var(--text-primary); transition: backg
 .theme-toggle:hover { border-color: #16a06a; }
 
 .summary-bar { margin: 16px 18px 0; background: var(--bg-panel); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 14px; display: flex; flex-direction: column; gap: 12px; box-shadow: var(--shadow); }
+.summary-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.summary-header-text { display: flex; flex-direction: column; gap: 2px; }
+.summary-header-title { font-size: 13px; font-weight: 700; color: var(--text-primary); }
+.summary-header-subtitle { font-size: 10px; color: var(--text-faint); }
+.summary-toggle { border: 1px solid var(--border); border-radius: 999px; background: var(--bg-stat); color: var(--text-primary); padding: 7px 12px; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.summary-toggle:hover { border-color: rgba(22,160,106,.65); }
+.summary-details { display: flex; flex-direction: column; gap: 12px; }
+.summary-details[hidden] { display: none; }
 .summary-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
 .summary-stat { background: var(--bg-stat); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 9px 10px; text-align: center; }
 .summary-stat-label { font-size: 10px; color: var(--text-faint); }
@@ -436,6 +444,8 @@ table.history-table tr:last-child td { border-bottom: none; }
   .divider { display: none; }
   .summary-bar, .market-ranking-section, .markets { margin-left: 10px; margin-right: 10px; padding-left: 0; padding-right: 0; }
   .summary-bar { padding: 12px; border-radius: 18px; }
+  .summary-header { align-items: center; }
+  .summary-toggle { min-height: 36px; padding: 7px 10px; font-size: 11px; }
   .summary-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .opportunity-grid, .backtest-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .summary-stat { padding: 10px 8px; }
@@ -452,13 +462,30 @@ table.history-table tr:last-child td { border-bottom: none; }
   .market-rank-details { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .markets { grid-template-columns: 1fr; }
   .card {
-    border-radius: 18px;
-    padding: 12px;
+    border-radius: 14px;
+    padding: 9px;
   }
-  .chart-container { height: 240px; }
-  .stats, .auto-status-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .trade-plan { grid-template-columns: 1fr 1fr; }
-  .trade-plan > div:first-child { grid-column: 1 / -1; }
+  .card-header { margin-bottom: 6px; }
+  .card-title { font-size: 12px; }
+  .card-time, .badge { font-size: 9px; }
+  .btn-remove { padding: 2px 6px; font-size: 10px; }
+  .chart-container { height: 145px; margin-bottom: 7px; }
+  .stats, .auto-status-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
+  .stat { padding: 5px 4px; }
+  .stat-label, .auto-status-grid small { font-size: 8px; }
+  .stat-value, .auto-status-grid b { font-size: 10px; }
+  .auto-toggle-row, .auto-status, .signal { margin-bottom: 6px; }
+  .auto-status { padding: 7px; }
+  .auto-status-head, .auto-toggle-label { font-size: 10px; }
+  .auto-status-reason { font-size: 9px; margin-top: 5px; }
+  .signal { padding: 6px 8px; font-size: 12px; }
+  .signal-quality { margin-top: 4px; padding: 5px 7px; font-size: 10px; }
+  .trade-plan { grid-template-columns: repeat(3, minmax(0, 1fr)); padding: 6px 7px; gap: 4px; }
+  .trade-plan-label { font-size: 8px; }
+  .trade-plan-value { font-size: 10px; }
+  .trade-plan-extra { padding: 6px 7px; margin-top: 5px; }
+  .trade-plan-extra-label, .trade-plan-ratio { font-size: 9px; }
+  .trade-plan-extra-value { font-size: 12px; }
   .modal-overlay {
     padding: 0;
     align-items: stretch;
@@ -489,6 +516,8 @@ table.history-table tr:last-child td { border-bottom: none; }
 @media (max-width: 420px) {
   .summary-stats, .health-grid, .opportunity-grid, .backtest-metrics { grid-template-columns: 1fr 1fr; }
   .summary-stat:first-child { grid-column: 1 / -1; }
+  .summary-header { align-items: stretch; flex-direction: column; }
+  .summary-toggle { width: 100%; }
   .mobile-bottom-nav {
     left: 6px;
     right: 6px;
@@ -506,7 +535,7 @@ table.history-table tr:last-child td { border-bottom: none; }
   .account-mode-pill select { font-size: 11px; padding: 7px 24px 7px 9px; }
   .balance-value { font-size: 12px; }
   .header-invest-controls { grid-template-columns: 1fr; }
-  .trade-plan { grid-template-columns: 1fr; }
+  .trade-plan { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
 @media (max-width: 340px) {
@@ -598,35 +627,44 @@ table.history-table tr:last-child td { border-bottom: none; }
 </div>
 
 <div class="summary-bar" id="mobile-home">
-  <div class="summary-stats">
-    <div class="summary-stat">
-      <div class="summary-stat-label" id="hist-total-label">Operaciones demo</div>
-      <div class="summary-stat-value" id="hist-total">0</div>
+  <div class="summary-header">
+    <div class="summary-header-text">
+      <div class="summary-header-title">Estado de cuenta y alertas</div>
+      <div class="summary-header-subtitle">Despliega solo cuando quieras revisar métricas.</div>
     </div>
-    <div class="summary-stat">
-      <div class="summary-stat-label">Ganadas</div>
-      <div class="summary-stat-value" id="hist-ganadas" style="color:#16a06a">0</div>
-    </div>
-    <div class="summary-stat">
-      <div class="summary-stat-label">Perdidas</div>
-      <div class="summary-stat-value" id="hist-perdidas" style="color:#e0483d">0</div>
-    </div>
-    <div class="summary-stat">
-      <div class="summary-stat-label">Win rate</div>
-      <div class="summary-stat-value" id="hist-winrate">—</div>
-    </div>
+    <button class="summary-toggle" id="summary-toggle" onclick="alternarPanelEstado()" aria-expanded="false" aria-controls="summary-details">Mostrar estado</button>
   </div>
-  <div class="production-panel">
-    <div class="health-grid" id="production-health">
-      <div class="health-card health-warn"><small>Deriv</small><b>Inicializando...</b></div>
-      <div class="health-card health-warn"><small>Mercados</small><b>Sin datos</b></div>
-      <div class="health-card health-warn"><small>Portfolio</small><b>Pendiente</b></div>
-      <div class="health-card health-warn"><small>Modo real</small><b>Bloqueado automático</b></div>
+  <div class="summary-details" id="summary-details" hidden>
+    <div class="summary-stats">
+      <div class="summary-stat">
+        <div class="summary-stat-label" id="hist-total-label">Operaciones demo</div>
+        <div class="summary-stat-value" id="hist-total">0</div>
+      </div>
+      <div class="summary-stat">
+        <div class="summary-stat-label">Ganadas</div>
+        <div class="summary-stat-value" id="hist-ganadas" style="color:#16a06a">0</div>
+      </div>
+      <div class="summary-stat">
+        <div class="summary-stat-label">Perdidas</div>
+        <div class="summary-stat-value" id="hist-perdidas" style="color:#e0483d">0</div>
+      </div>
+      <div class="summary-stat">
+        <div class="summary-stat-label">Win rate</div>
+        <div class="summary-stat-value" id="hist-winrate">—</div>
+      </div>
     </div>
-    <div class="alert-panel">
-      <div class="alert-panel-title">Alertas recientes</div>
-      <div class="alert-list" id="alert-list">
-        <div class="alert-item alert-item-info">La app está lista para monitorear eventos importantes.</div>
+    <div class="production-panel">
+      <div class="health-grid" id="production-health">
+        <div class="health-card health-warn"><small>Deriv</small><b>Inicializando...</b></div>
+        <div class="health-card health-warn"><small>Mercados</small><b>Sin datos</b></div>
+        <div class="health-card health-warn"><small>Portfolio</small><b>Pendiente</b></div>
+        <div class="health-card health-warn"><small>Modo real</small><b>Bloqueado automático</b></div>
+      </div>
+      <div class="alert-panel">
+        <div class="alert-panel-title">Alertas recientes</div>
+        <div class="alert-list" id="alert-list">
+          <div class="alert-item alert-item-info">La app está lista para monitorear eventos importantes.</div>
+        </div>
       </div>
     </div>
   </div>

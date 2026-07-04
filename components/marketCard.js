@@ -48,7 +48,7 @@ export function createMarketCard({ id, nombre, perfil, periodo, chartTheme }) {
   const container = document.getElementById(`chart-${id}`);
   const chart = LightweightCharts.createChart(container, {
     width: container.clientWidth,
-    height: 200,
+    height: container.clientHeight || 200,
     layout: { background: { color: chartTheme.bg }, textColor: chartTheme.text },
     grid: { vertLines: { color: chartTheme.grid }, horzLines: { color: chartTheme.grid } },
     crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
@@ -62,6 +62,9 @@ export function createMarketCard({ id, nombre, perfil, periodo, chartTheme }) {
   const maSeries = chart.addLineSeries({
     color: '#f6a623', lineWidth: 2, priceLineVisible: false, lastValueVisible: false,
   });
-  window.addEventListener('resize', () => chart.applyOptions({ width: container.clientWidth }));
+  window.addEventListener('resize', () => chart.applyOptions({
+    width: container.clientWidth,
+    height: container.clientHeight || 200,
+  }));
   return { chart, candleSeries, maSeries };
 }
