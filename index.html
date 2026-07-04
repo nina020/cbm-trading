@@ -68,7 +68,6 @@ body { background: var(--bg-page); color: var(--text-primary); transition: backg
 .account-mode-pill { font-size: 12px; border: 1px solid var(--border); border-radius: 999px; padding: 7px 10px; background: var(--bg-stat); color: var(--text-secondary); }
 .account-mode-pill.mode-real { color: var(--danger); border-color: rgba(239,83,80,.45); background: rgba(239,83,80,.1); }
 .account-mode-pill.mode-demo { color: var(--blue); border-color: rgba(41,98,255,.45); background: rgba(41,98,255,.1); }
-.account-mode-pill.mode-simulacion { color: var(--accent); border-color: rgba(38,166,154,.45); background: rgba(38,166,154,.1); }
 .theme-toggle { background: var(--bg-stat); border: 1px solid var(--border); border-radius: 6px; padding: 6px 12px; font-size: 13px; cursor: pointer; color: var(--text-primary); display: flex; align-items: center; gap: 6px; }
 .theme-toggle:hover { border-color: #16a06a; }
 
@@ -353,7 +352,7 @@ table.history-table tr:last-child td { border-bottom: none; }
 <div class="header">
   <h1>Panel de trading</h1>
   <div class="header-right">
-    <div class="account-mode-pill mode-simulacion" id="account-mode-pill">Simulación segura</div>
+    <div class="account-mode-pill mode-demo" id="account-mode-pill">Cuenta demo real</div>
     <div class="balance-info">
       <span id="balance-label">Saldo demo (Deriv):</span>
       <span class="balance-value" id="balance-value">Cargando...</span>
@@ -481,8 +480,7 @@ table.history-table tr:last-child td { border-bottom: none; }
     <div class="config-group period">
       <label>Modo de ejecución</label>
       <select id="execution-mode" onchange="cambiarModoEjecucion(this.value)">
-        <option value="simulacion" selected>Simulación segura</option>
-        <option value="demo">Cuenta demo real</option>
+        <option value="demo" selected>Cuenta demo real</option>
         <option value="real">Cuenta real controlada</option>
       </select>
     </div>
@@ -492,7 +490,7 @@ table.history-table tr:last-child td { border-bottom: none; }
     <button class="btn-add" id="btn-add-market" onclick="agregarMercado()">+ Agregar</button>
   </div>
 
-  <div class="risk-note">El modo <b>Simulación segura</b> no envía compras a Deriv. <b>Cuenta real controlada</b> usa dinero real, bloquea automático y limita cada operación a $2.</div>
+  <div class="risk-note"><b>Cuenta demo real</b> envía órdenes a la cuenta demo de Deriv (dinero ficticio). <b>Cuenta real controlada</b> usa dinero real, bloquea automático y limita cada operación a $2.</div>
   <div class="storage-note">💾 El historial de señales se guarda automáticamente en este navegador y persiste al recargar la página.</div>
 </div>
 
@@ -533,7 +531,6 @@ table.history-table tr:last-child td { border-bottom: none; }
         <button class="filter-chip active" data-execution-filter="todos" onclick="cambiarFiltroEjecuciones('todos')">Todos</button>
         <button class="filter-chip" data-execution-filter="demo" onclick="cambiarFiltroEjecuciones('demo')">Demo</button>
         <button class="filter-chip" data-execution-filter="real" onclick="cambiarFiltroEjecuciones('real')">Real</button>
-        <button class="filter-chip" data-execution-filter="simulacion" onclick="cambiarFiltroEjecuciones('simulacion')">Simulación</button>
         <button class="filter-chip" data-execution-filter="ganada" onclick="cambiarFiltroEjecuciones('ganada')">Ganadas</button>
         <button class="filter-chip" data-execution-filter="perdida" onclick="cambiarFiltroEjecuciones('perdida')">Perdidas</button>
         <button class="filter-chip" data-execution-filter="pendiente" onclick="cambiarFiltroEjecuciones('pendiente')">Pendientes</button>
@@ -584,10 +581,6 @@ table.history-table tr:last-child td { border-bottom: none; }
         <div class="positions-group-title" id="real-positions-title">Cuenta demo real</div>
         <div id="real-positions"><div class="positions-empty">Abre esta ventana para consultar las posiciones.</div></div>
       </div>
-      <div class="positions-group" id="simulated-positions-group" style="display:none">
-        <div class="positions-group-title">Simulación segura</div>
-        <div id="simulated-positions"></div>
-      </div>
     </div>
   </div>
 </div>
@@ -612,7 +605,7 @@ table.history-table tr:last-child td { border-bottom: none; }
       <div class="opportunity-item"><small>Riesgo máximo</small><b id="offhours-risk">—</b></div>
       <div class="opportunity-item"><small>Objetivo</small><b id="offhours-target">—</b></div>
     </div>
-    <div class="risk-note" id="offhours-mode-note">Modo actual: <b id="offhours-mode">—</b>. Cambia el modo arriba antes de confirmar si quieres usar simulación o cuenta demo real.</div>
+    <div class="risk-note" id="offhours-mode-note">Modo actual: <b id="offhours-mode">—</b>. Las inversiones se envían a la cuenta demo de Deriv.</div>
     <div style="margin-top:16px;display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap">
       <button class="modal-close" onclick="cerrarOportunidadFueraHorario()">Descartar</button>
       <button class="btn-add" id="offhours-action" onclick="invertirOportunidadFueraHorario()">Invertir ahora</button>
@@ -762,7 +755,7 @@ table.history-table tr:last-child td { border-bottom: none; }
       </div>
     </div>
     <div class="risk-note" style="margin-top:12px">
-      Estos límites bloquean operaciones manuales y automáticas antes de enviar una orden o abrir una simulación.
+      Estos límites bloquean operaciones manuales y automáticas antes de enviar una orden a Deriv.
     </div>
     <div style="margin-top:16px;display:flex;justify-content:flex-end;gap:8px">
       <button class="btn-history" onclick="reanudarOperativa()">Reanudar operativa</button>

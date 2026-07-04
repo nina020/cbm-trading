@@ -82,29 +82,3 @@ export function createRealPositionCard({
   return div;
 }
 
-export function createSimulatedPositionCard(posicion, objetivos) {
-  const div = document.createElement('div');
-  div.className = 'position-card';
-  div.id = `pos-${posicion.id}`;
-  const tipoLabel = posicion.tipo === 'BUY' ? '🟢 BUY' : '🔴 SELL';
-  const pnl = Number(posicion.pnl) || 0;
-  div.innerHTML = `
-    <div>
-      <div class="pos-title">${posicion.nombre} — ${tipoLabel} (Simulación)</div>
-      <div class="pos-sub">Stake: $${Number(posicion.stake).toFixed(2)} | Spot: <span class="pos-spot">${Number(posicion.precioActual).toFixed(3)}</span> | ${posicion.origen === 'automatica' ? 'Automática' : 'Manual'}</div>
-      <div class="pos-limits">
-        <span>Stop Loss <b class="pos-sl-amount">${dineroLimite(objetivos.riesgo)}</b></span>
-        <span>Take Profit <b class="pos-tp-amount">${dineroLimite(objetivos.objetivo)}</b></span>
-      </div>
-    </div>
-    <div class="pos-pnl-box">
-      <div class="pos-pnl" style="color:${pnl >= 0 ? '#26a69a' : '#ef5350'}">${pnl >= 0 ? '+' : '-'}$${Math.abs(pnl).toFixed(2)}</div>
-      <div class="pos-status">Abierto</div>
-    </div>
-    <div class="position-actions">
-      <button class="btn-history" onclick="verGraficoPosicion('${posicion.mercadoId}', '${posicion.nombre}')">Ver gráfico en vivo</button>
-      <button class="btn-close" onclick="cerrarPosicionSimulada('${posicion.id}')">Cerrar operación</button>
-    </div>
-  `;
-  return div;
-}

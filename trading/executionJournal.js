@@ -85,6 +85,13 @@ export function createExecutionJournal({ storageKey, onChange, storage = localSt
       storage.removeItem(storageKey);
       onChange(registros);
     },
+    depurarModo(modo) {
+      const filtrados = registros.filter(item => item.modo !== modo);
+      if (filtrados.length === registros.length) return false;
+      registros = filtrados;
+      guardar();
+      return true;
+    },
     get registros() {
       return registros;
     },

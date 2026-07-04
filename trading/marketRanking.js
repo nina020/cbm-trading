@@ -8,8 +8,8 @@ function puntosPerfil(perfil) {
   return 4;
 }
 
-// Solo operaciones realmente enviadas a Deriv (demo o real);
-// las simulaciones internas no cuentan para el ranking.
+// Solo operaciones realmente enviadas a Deriv (demo o real); registros
+// antiguos de otros modos no cuentan para el ranking.
 const MODOS_DERIV = new Set(['demo', 'real']);
 
 function resumirHistorial(registros, mercadoId) {

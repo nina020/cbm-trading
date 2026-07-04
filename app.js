@@ -1,6 +1,5 @@
 import {
   INTERVALO_VELA, RATIO_RECOMPENSA, MULTIPLICADOR_DEFAULT,
-  SIM_STORAGE_KEY,
   EXECUTION_STORAGE_KEY, SIGNAL_CONFIG_STORAGE_KEY, STRATEGY_CONFIG_STORAGE_KEY,
   GLOBAL_RISK_STORAGE_KEY, ORDER_AUDIT_STORAGE_KEY, NOMBRES_SIMBOLOS, MERCADOS_ESTABLES, TEMAS,
 } from './config.js';
@@ -14,7 +13,6 @@ import {
 import {
   createRiskManager, calcularObjetivosMonetarios,
 } from './trading/riskManager.js';
-import { createSimulationEngine } from './trading/simulationEngine.js';
 import { createAutoTrader } from './trading/autoTrader.js';
 import { createExecutionJournal } from './trading/executionJournal.js';
 import { createOrderAudit } from './trading/orderAudit.js';
@@ -30,7 +28,7 @@ import { createGlobalRiskManager } from './trading/globalRiskManager.js';
 import { evaluarPreparacionReal, evaluarSemanaTrading } from './trading/weeklyEvaluation.js';
 import { createMarketCard } from './components/marketCard.js';
 import {
-  createRealPositionCard, createSimulatedPositionCard, resolverLimitesMonetarios,
+  createRealPositionCard, resolverLimitesMonetarios,
   obtenerTimestampContrato,
 } from './components/positionCards.js';
 import { renderExecutionTable } from './components/executionTable.js';
@@ -44,7 +42,7 @@ import { evaluarCandidatoCanasta, seleccionarMercadosCanasta } from './trading/b
 let mercadosActivos = {};
 let mercadosEscaneados = [];
 let actualizacionRankingEnCurso = false;
-let modoEjecucion = 'simulacion';
+let modoEjecucion = 'demo';
 const REAL_CONTROLADO_MAX_STAKE = 2;
 const FEE_REVIEW_INTERVAL_SECONDS = 30 * 60;
 const MARKET_RANKING_REFRESH_MS = 2 * 60 * 1000;
@@ -77,7 +75,6 @@ const globalRiskManager = createGlobalRiskManager({
 });
 
 const cloudSyncReady = iniciarSincronizacionCloud([
-  SIM_STORAGE_KEY,
   EXECUTION_STORAGE_KEY,
   SIGNAL_CONFIG_STORAGE_KEY,
   STRATEGY_CONFIG_STORAGE_KEY,
@@ -101,7 +98,7 @@ function renderRegistroEjecuciones(registros) {
 
 function filtrarEjecuciones(registros) {
   if (filtroEjecuciones === 'todos') return registros;
-  if (['demo', 'real', 'simulacion'].includes(filtroEjecuciones)) {
+  if (['demo', 'real'].includes(filtroEjecuciones)) {
     return registros.filter(item => item.modo === filtroEjecuciones);
   }
   return registros.filter(item => item.estado === filtroEjecuciones);
@@ -455,13 +452,11 @@ function temaActual() {
 function actualizarIndicadorModo() {
   const pill = document.getElementById('account-mode-pill');
   if (!pill) return;
-  pill.classList.remove('mode-real', 'mode-demo', 'mode-simulacion');
+  pill.classList.remove('mode-real', 'mode-demo');
   pill.classList.add(`mode-${modoEjecucion}`);
   pill.textContent = modoEjecucion === 'real'
     ? 'Cuenta real controlada'
-    : modoEjecucion === 'demo'
-      ? 'Cuenta demo real'
-      : 'Simulación segura';
+    : 'Cuenta demo real';
 }
 
 function toggleTheme() {
@@ -626,7 +621,7 @@ function mostrarOportunidadFueraHorario({ mercadoId, nombre, tipo, puntuacion, e
   if (modeNote) {
     modeNote.innerHTML = esReal
       ? 'Modo actual: <b id="offhours-mode">Cuenta real controlada</b>. Esta acción puede usar dinero real y requiere confirmación manual.'
-      : 'Modo actual: <b id="offhours-mode">—</b>. Cambia el modo arriba antes de confirmar si quieres usar simulación o cuenta demo real.';
+      : 'Modo actual: <b id="offhours-mode">—</b>. Las inversiones se envían a la cuenta demo de Deriv.';
   }
 
   document.getElementById('offhours-market').textContent = nombre;
@@ -638,16 +633,12 @@ function mostrarOportunidadFueraHorario({ mercadoId, nombre, tipo, puntuacion, e
   document.getElementById('offhours-stake').textContent = `$${inversion.toFixed(2)}`;
   document.getElementById('offhours-risk').textContent = `$${objetivos.riesgo.toFixed(2)}`;
   document.getElementById('offhours-target').textContent = `$${objetivos.objetivo.toFixed(2)}`;
-  document.getElementById('offhours-mode').textContent = modoEjecucion === 'demo'
-    ? 'Cuenta demo real'
-    : modoEjecucion === 'real'
-      ? 'Cuenta real controlada'
-      : 'Simulación segura';
-  document.getElementById('offhours-action').textContent = modoEjecucion === 'demo'
-    ? 'Invertir ahora en demo'
-    : modoEjecucion === 'real'
-      ? 'Evaluar operación real'
-      : 'Abrir simulación ahora';
+  document.getElementById('offhours-mode').textContent = modoEjecucion === 'real'
+    ? 'Cuenta real controlada'
+    : 'Cuenta demo real';
+  document.getElementById('offhours-action').textContent = modoEjecucion === 'real'
+    ? 'Evaluar operación real'
+    : 'Invertir ahora en demo';
   document.getElementById('offhours-modal').style.display = 'flex';
 }
 
@@ -681,11 +672,9 @@ async function invertirOportunidadFueraHorario() {
   } finally {
     if (boton) {
       boton.disabled = false;
-      boton.textContent = modoEjecucion === 'demo'
-        ? 'Invertir ahora en demo'
-        : modoEjecucion === 'real'
-          ? 'Evaluar operación real'
-          : 'Abrir simulación ahora';
+      boton.textContent = modoEjecucion === 'real'
+        ? 'Evaluar operación real'
+        : 'Invertir ahora en demo';
     }
   }
 }
@@ -873,7 +862,6 @@ function cerrarEjecucionesClick(event) {
 
 function abrirPosiciones() {
   document.getElementById('positions-modal').style.display = 'flex';
-  renderPosicionesSimuladas(simulationEngine.posiciones);
   cargarPortfolio();
 }
 
@@ -1006,7 +994,7 @@ function cambiarModoEjecucion(modo) {
       return;
     }
   }
-  modoEjecucion = ['demo', 'real'].includes(modo) ? modo : 'simulacion';
+  modoEjecucion = modo === 'real' ? 'real' : 'demo';
   if (modoEjecucion === 'real') {
     Object.keys(mercadosActivos).forEach(id => {
       autoTrader.toggle(id, false);
@@ -1018,17 +1006,13 @@ function cambiarModoEjecucion(modo) {
   registrarLogAuto(
     modoEjecucion === 'real'
       ? 'Cuenta real controlada activada. Automático bloqueado y monto máximo $2.'
-      : modoEjecucion === 'demo'
-        ? 'Modo cuenta demo real activado. Las próximas ejecuciones enviarán órdenes a Deriv demo.'
-        : 'Modo simulación segura activado. No se enviarán órdenes a Deriv.',
-    modoEjecucion === 'real' || modoEjecucion === 'demo' ? 'error' : 'success'
+      : 'Modo cuenta demo real activado. Las próximas ejecuciones enviarán órdenes a Deriv demo.',
+    'error',
   );
   emitirAlerta(
     modoEjecucion === 'real'
       ? 'Cuenta real controlada activada: automático bloqueado y confirmación fuerte habilitada.'
-      : modoEjecucion === 'demo'
-        ? 'Cuenta demo real activada.'
-        : 'Simulación segura activada.',
+      : 'Cuenta demo real activada.',
     modoEjecucion === 'real' ? 'warning' : 'info',
   );
   if (modoEjecucion === 'real') solicitarPermisoNotificaciones();
@@ -1439,67 +1423,6 @@ async function cargarPortfolio({ manual = false } = {}) {
   }
 }
 
-const simulationEngine = createSimulationEngine({
-  storageKey: SIM_STORAGE_KEY,
-  getStake: () => calcularInversionSugerida(),
-  getMultiplier: () => MULTIPLICADOR_DEFAULT,
-  getNombre: id => NOMBRES_SIMBOLOS[id] || id,
-  onChange: renderPosicionesSimuladas,
-  onLog: registrarLogAuto,
-  onOpen: posicion => executionJournal.abrir({
-    id: posicion.id,
-    mercadoId: posicion.mercadoId,
-    nombre: posicion.nombre,
-    tipo: posicion.tipo,
-    modo: 'simulacion',
-    origen: posicion.origen,
-    stake: posicion.stake,
-    entrada: posicion.entrada,
-    multiplicador: posicion.multiplicador,
-    costosReportados: 0,
-    stopLossAmount: calcularObjetivosMonetarios(posicion.stake).riesgo,
-    takeProfitAmount: calcularObjetivosMonetarios(posicion.stake).objetivo,
-  }),
-  onClose: (posicion, pnl) => executionJournal.cerrar(posicion.id, {
-    pnlBruto: pnl,
-    costos: 0,
-    pnlNeto: pnl,
-  }),
-});
-
-function renderPosicionesSimuladas(posiciones) {
-  const grupo = document.getElementById('simulated-positions-group');
-  const contenedor = document.getElementById('simulated-positions');
-  if (!grupo || !contenedor) return;
-
-  if (!posiciones.length) {
-    grupo.style.display = 'none';
-    contenedor.innerHTML = '';
-    return;
-  }
-
-  grupo.style.display = 'flex';
-  contenedor.innerHTML = '';
-  posiciones.forEach(posicion => {
-    contenedor.appendChild(createSimulatedPositionCard(
-      posicion,
-      calcularObjetivosMonetarios(posicion.stake),
-    ));
-  });
-}
-
-function abrirPosicionSimulada(...args) {
-  return simulationEngine.abrir(...args);
-}
-
-function actualizarPosicionesSimuladas(...args) {
-  simulationEngine.actualizar(...args);
-}
-
-function cerrarPosicionSimulada(id) {
-  simulationEngine.cerrar(id);
-}
-
 function cerrarPosicion(contractId) {
   if (!portfolioWs || portfolioWs.readyState !== WebSocket.OPEN) {
     emitirAlerta('Reconectando portfolio, intenta cerrar la operación en un momento.', 'warning');
@@ -1546,10 +1469,6 @@ async function ejecutarOperacion(mercadoId, tipo, entrada, sl, tp, btnId) {
     alert(`Operación bloqueada por riesgo:\n\n${evaluacionRiesgo.motivo}`);
     renderEstadoRiesgoGlobal();
     return false;
-  }
-  if (modoEjecucion === 'simulacion') {
-    abrirPosicionSimulada(mercadoId, tipo, entrada, sl, tp);
-    return true;
   }
 
   const btn = document.getElementById(btnId);
@@ -1708,10 +1627,6 @@ async function ejecutarOperacionAutomaticaCore(mercadoId, tipo, entrada, sl, tp,
     renderEstadoRiesgoGlobal();
     throw new Error(`Bloqueada por riesgo: ${evaluacionRiesgo.motivo}`);
   }
-  if (modoEjecucion === 'simulacion') {
-    abrirPosicionSimulada(mercadoId, tipo, entrada, sl, tp, 'automatica');
-    return true;
-  }
 
   orderAudit.registrar({
     etapa: 'intento automático',
@@ -1828,9 +1743,7 @@ function etiquetaInversion() {
 }
 
 function etiquetaModoOperacion() {
-  if (modoEjecucion === 'real') return 'Cuenta real controlada';
-  if (modoEjecucion === 'demo') return 'Cuenta demo real';
-  return 'Simulación segura';
+  return modoEjecucion === 'real' ? 'Cuenta real controlada' : 'Cuenta demo real';
 }
 
 function crearTarjeta(id, nombre, perfil, periodo) {
@@ -1843,11 +1756,9 @@ function renderPlan(entrada, sl, tp, tipo, mercadoId, calidad) {
   const { riesgo: riesgoMonetario, objetivo: objetivoMonetario } = calcularObjetivosMonetarios(inversion);
   const btnId = `exec-${mercadoId}`;
   const btnClass = tipo === 'SELL' ? 'btn-execute sell' : 'btn-execute';
-  const accionTexto = modoEjecucion === 'simulacion'
-    ? 'Abrir simulación'
-    : modoEjecucion === 'real'
-      ? 'Ejecutar real controlado'
-      : 'Ejecutar en demo';
+  const accionTexto = modoEjecucion === 'real'
+    ? 'Ejecutar real controlado'
+    : 'Ejecutar en demo';
   const autoBadge = autoTrader.estaActivo(mercadoId) ? '<span style="font-size:10px;padding:2px 6px;border-radius:4px;font-weight:500;background:rgba(41,98,255,0.15);color:#2962ff;margin-left:6px">🤖 AUTO</span>' : '';
   return `
     <div class="trade-plan">
@@ -2046,7 +1957,6 @@ async function agregarMercado(mercadoId = null, opciones = {}) {
         }
         candleSeries.update(velaActual);
 
-        actualizarPosicionesSimuladas(id, precio);
 
         if (precios.length < periodo) return;
         if (precios.length > periodo) precios.shift();
@@ -2327,7 +2237,6 @@ Object.assign(window, {
   prepararCanastaDemoAutomatica,
   cargarPortfolio,
   cerrarPosicion,
-  cerrarPosicionSimulada,
   ejecutarOperacion,
   abrirMercadoRecomendado,
   agregarMercado,
@@ -2335,10 +2244,10 @@ Object.assign(window, {
 });
 
 function limpiarDatosHuerfanos() {
-  // El historial de señales y el backtesting (con sus calibraciones) se
-  // eliminaron de la app; purga los datos que quedaron guardados en este
-  // navegador y en la nube.
-  ['cbm_historial_v1', 'cbm_market_calibration_v1'].forEach(key => {
+  // El historial de señales, el backtesting (con sus calibraciones) y la
+  // simulación segura se eliminaron de la app; purga los datos que quedaron
+  // guardados en este navegador y en la nube.
+  ['cbm_historial_v1', 'cbm_market_calibration_v1', 'cbm_posiciones_simuladas_v1'].forEach(key => {
     localStorage.removeItem(key);
     fetch(`/api/state/${key}`, { method: 'DELETE' }).catch(() => {});
   });
@@ -2352,8 +2261,8 @@ async function iniciarApp() {
   cargarStrategyConfig();
   renderResumenEjecuciones([]);
   executionJournal.cargar();
+  executionJournal.depurarModo('simulacion');
   orderAudit.cargar();
-  simulationEngine.cargar();
   actualizarSaldo();
   setInterval(actualizarSaldo, 30000);
   setInterval(revisarSaludMercados, 15000);

@@ -1,6 +1,6 @@
 # CBM Trading
 
-Panel web para análisis, simulación, operación en cuenta demo y estructura de cuenta real controlada en Deriv.
+Panel web para análisis, operación en cuenta demo y cuenta real controlada en Deriv.
 
 ## Desarrollo local
 
@@ -66,7 +66,6 @@ Cuando `DATABASE_URL` está disponible, el servidor crea la tabla `app_state` y
 sincroniza estas claves:
 
 - Registro de ejecuciones.
-- Posiciones simuladas.
 - Calidad de señales.
 - Límites globales de riesgo.
 

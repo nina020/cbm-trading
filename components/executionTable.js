@@ -10,9 +10,7 @@ function dinero(value, signo = false) {
 }
 
 function modoTexto(modo) {
-  if (modo === 'simulacion') return 'Simulación';
-  if (modo === 'real') return 'Real controlado';
-  return 'Demo real';
+  return modo === 'real' ? 'Real controlado' : 'Demo real';
 }
 
 function origenTexto(item) {

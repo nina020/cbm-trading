@@ -55,153 +55,6 @@ test('los objetivos monetarios son proporcionales a la inversión', async () => 
   assert.equal(objetivos[1].objetivo / objetivos[0].objetivo, 4);
 });
 
-test('el P&L al alcanzar take profit escala con la inversión', async () => {
-  const { calcularPnlSimulado } = await riskManager;
-  const pnl5 = calcularPnlSimulado({ ...operacionBuy, stake: 5, precio: operacionBuy.tp });
-  const pnl20 = calcularPnlSimulado({ ...operacionBuy, stake: 20, precio: operacionBuy.tp });
-  const pnl100 = calcularPnlSimulado({ ...operacionBuy, stake: 100, precio: operacionBuy.tp });
-
-  assert.equal(pnl5, 1.875);
-  assert.equal(pnl20, 7.5);
-  assert.equal(pnl100, 37.5);
-  assert.equal(pnl20 / pnl5, 4);
-});
-
-test('el P&L al alcanzar stop loss escala con la inversión', async () => {
-  const { calcularPnlSimulado } = await riskManager;
-  const pnl5 = calcularPnlSimulado({ ...operacionBuy, stake: 5, precio: operacionBuy.sl });
-  const pnl20 = calcularPnlSimulado({ ...operacionBuy, stake: 20, precio: operacionBuy.sl });
-
-  assert.equal(pnl5, -1.25);
-  assert.equal(pnl20, -5);
-  assert.equal(pnl20 / pnl5, 4);
-});
-
-test('el cálculo funciona igual para operaciones SELL', async () => {
-  const { calcularPnlSimulado } = await riskManager;
-  const pnl = calcularPnlSimulado({
-    stake: 20,
-    tipo: 'SELL',
-    entrada: 100,
-    sl: 101,
-    tp: 98.5,
-    precio: 98.5,
-  });
-
-  assert.equal(pnl, 7.5);
-});
-
-test('BUY y SELL detectan SL/TP exactos y saltos más allá del nivel', async () => {
-  const { evaluarSalidaPorPrecio } = await riskManager;
-
-  assert.equal(evaluarSalidaPorPrecio({ ...operacionBuy, precio: 101.5 }), 'take_profit');
-  assert.equal(evaluarSalidaPorPrecio({ ...operacionBuy, precio: 103 }), 'take_profit');
-  assert.equal(evaluarSalidaPorPrecio({ ...operacionBuy, precio: 99 }), 'stop_loss');
-  assert.equal(evaluarSalidaPorPrecio({ ...operacionBuy, precio: 97 }), 'stop_loss');
-  assert.equal(evaluarSalidaPorPrecio({ ...operacionBuy, precio: 100.5 }), null);
-
-  const operacionSell = { tipo: 'SELL', entrada: 100, sl: 101, tp: 98.5 };
-  assert.equal(evaluarSalidaPorPrecio({ ...operacionSell, precio: 98.5 }), 'take_profit');
-  assert.equal(evaluarSalidaPorPrecio({ ...operacionSell, precio: 97 }), 'take_profit');
-  assert.equal(evaluarSalidaPorPrecio({ ...operacionSell, precio: 101 }), 'stop_loss');
-  assert.equal(evaluarSalidaPorPrecio({ ...operacionSell, precio: 103 }), 'stop_loss');
-  assert.equal(evaluarSalidaPorPrecio({ ...operacionSell, precio: 99.5 }), null);
-});
-
-test('niveles invertidos no provocan cierres automáticos incorrectos', async () => {
-  const { evaluarSalidaPorPrecio } = await riskManager;
-
-  assert.equal(evaluarSalidaPorPrecio({
-    tipo: 'BUY',
-    entrada: 100,
-    sl: 101,
-    tp: 99,
-    precio: 102,
-  }), null);
-});
-
-test('el motor de simulación conserva la proporción al cerrar operaciones', async () => {
-  const { createSimulationEngine } = await cargarModulo(
-    path.join(__dirname, '../trading/simulationEngine.js'),
-  );
-
-  async function simular(stake) {
-    let resultado;
-    const datos = new Map();
-    const engine = createSimulationEngine({
-      storageKey: 'prueba',
-      getStake: () => stake,
-      getNombre: () => 'Mercado de prueba',
-      onChange: () => {},
-      onLog: () => {},
-      onClose: (_posicion, pnl) => { resultado = pnl; },
-      storage: {
-        getItem: key => datos.get(key) || null,
-        setItem: (key, value) => datos.set(key, value),
-      },
-    });
-
-    engine.abrir('TEST', 'BUY', 100, 99, 101.5);
-    engine.actualizar('TEST', 101.5);
-    return resultado;
-  }
-
-  const pnl5 = await simular(5);
-  const pnl20 = await simular(20);
-
-  assert.equal(pnl5, 1.875);
-  assert.equal(pnl20, 7.5);
-  assert.equal(pnl20 / pnl5, 4);
-});
-
-test('el motor limita el resultado cuando el precio salta más allá de TP o SL', async () => {
-  const { createSimulationEngine } = await cargarModulo(
-    path.join(__dirname, '../trading/simulationEngine.js'),
-  );
-
-  function simular(precioSalida) {
-    let resultado;
-    const engine = createSimulationEngine({
-      storageKey: 'saltos',
-      getStake: () => 20,
-      getNombre: () => 'Mercado de prueba',
-      onChange: () => {},
-      onLog: () => {},
-      onClose: (_posicion, pnl) => { resultado = pnl; },
-      storage: { getItem: () => null, setItem: () => {} },
-    });
-
-    engine.abrir('TEST', 'BUY', 100, 99, 101.5);
-    engine.actualizar('TEST', precioSalida);
-    return resultado;
-  }
-
-  assert.equal(simular(110), 7.5);
-  assert.equal(simular(90), -5);
-});
-
-test('el cierre manual conserva el P&L del último precio observado', async () => {
-  const { createSimulationEngine } = await cargarModulo(
-    path.join(__dirname, '../trading/simulationEngine.js'),
-  );
-  let resultado;
-  const engine = createSimulationEngine({
-    storageKey: 'manual',
-    getStake: () => 20,
-    getNombre: () => 'Mercado de prueba',
-    onChange: () => {},
-    onLog: () => {},
-    onClose: (_posicion, pnl) => { resultado = pnl; },
-    storage: { getItem: () => null, setItem: () => {} },
-  });
-
-  const posicion = engine.abrir('TEST', 'BUY', 100, 99, 101.5);
-  engine.actualizar('TEST', 100.75);
-  engine.cerrar(posicion.id);
-
-  assert.equal(resultado, 3.75);
-});
-
 test('la orden demo usa los mismos objetivos monetarios que la simulación', async () => {
   const { crearPayload } = await cargarModulo(
     path.join(__dirname, '../trading/orderService.js'),
@@ -1162,41 +1015,28 @@ test('el riesgo global pausa después de pérdidas consecutivas y puede reanudar
   assert.equal(manager.estado([]).pausado, false);
 });
 
-test('una ejecución automática abre una simulación visible con origen automático', async () => {
+test('una ejecución automática ejecuta la orden y respeta el cooldown', async () => {
   const { createAutoTrader } = await cargarModulo(
     path.join(__dirname, '../trading/autoTrader.js'),
   );
-  const { createSimulationEngine } = await cargarModulo(
-    path.join(__dirname, '../trading/simulationEngine.js'),
-  );
-  let posicionesRenderizadas = [];
-  const engine = createSimulationEngine({
-    storageKey: 'automaticas',
-    getStake: () => 5,
-    getNombre: () => 'Mercado automático',
-    onChange: posiciones => { posicionesRenderizadas = posiciones.map(item => ({ ...item })); },
-    onLog: () => {},
-    storage: {
-      getItem: () => null,
-      setItem: () => {},
-    },
-  });
-  engine.cargar();
+  const ejecutadas = [];
   const trader = createAutoTrader({
     getCooldown: () => 60,
     getNombre: () => 'Mercado automático',
     onLog: () => {},
     execute: (id, tipo, entrada, sl, tp) => {
-      engine.abrir(id, tipo, entrada, sl, tp, 'automatica');
+      ejecutadas.push({ id, tipo, entrada, sl, tp });
     },
+    getNow: () => 100000,
   });
 
   const abierta = await trader.procesar('AUTO', 'BUY', 100, 99, 101.5);
+  const repetida = await trader.procesar('AUTO', 'BUY', 100, 99, 101.5);
 
   assert.equal(abierta, true);
-  assert.equal(posicionesRenderizadas.length, 1);
-  assert.equal(posicionesRenderizadas[0].origen, 'automatica');
-  assert.equal(posicionesRenderizadas[0].mercadoId, 'AUTO');
+  assert.equal(repetida, false);
+  assert.equal(ejecutadas.length, 1);
+  assert.deepEqual(ejecutadas[0], { id: 'AUTO', tipo: 'BUY', entrada: 100, sl: 99, tp: 101.5 });
 });
 
 test('una ejecución automática fallida no consume el cooldown', async () => {

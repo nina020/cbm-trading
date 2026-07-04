@@ -2,7 +2,6 @@ export const INTERVALO_VELA = 5;
 export const RATIO_RECOMPENSA = 1.5;
 export const FRACCION_RIESGO_STAKE = 0.25;
 export const MULTIPLICADOR_DEFAULT = 100;
-export const SIM_STORAGE_KEY = 'cbm_posiciones_simuladas_v1';
 export const EXECUTION_STORAGE_KEY = 'cbm_ejecuciones_v2';
 export const SIGNAL_CONFIG_STORAGE_KEY = 'cbm_signal_config_v1';
 export const STRATEGY_CONFIG_STORAGE_KEY = 'cbm_strategy_config_v1';
