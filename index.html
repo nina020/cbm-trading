@@ -66,6 +66,7 @@ body { background: var(--bg-page); color: var(--text-primary); transition: backg
 .header-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .balance-info { font-size: 12px; display: flex; align-items: center; gap: 8px; color: var(--text-secondary); background: var(--bg-stat); border: 1px solid var(--border); border-radius: 999px; padding: 7px 10px; }
 .balance-value { font-weight: 600; color: #16a06a; font-size: 14px; }
+.header-invest-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .account-mode-pill { font-size: 12px; border: 1px solid var(--border); border-radius: 999px; padding: 0; background: var(--bg-stat); color: var(--text-secondary); overflow: hidden; display: flex; align-items: center; }
 .account-mode-pill select { width: 100%; min-width: 176px; border: 0; background: transparent; color: inherit; font: inherit; font-weight: 600; padding: 7px 30px 7px 11px; outline: none; cursor: pointer; }
 .account-mode-pill.mode-real { color: var(--danger); border-color: rgba(239,83,80,.45); background: rgba(239,83,80,.1); }
@@ -74,7 +75,7 @@ body { background: var(--bg-page); color: var(--text-primary); transition: backg
 .theme-toggle:hover { border-color: #16a06a; }
 
 .summary-bar { margin: 16px 18px 0; background: var(--bg-panel); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 14px; display: flex; flex-direction: column; gap: 12px; box-shadow: var(--shadow); }
-.summary-stats { display: grid; grid-template-columns: repeat(5, minmax(112px, 1fr)); gap: 10px; }
+.summary-stats { display: grid; grid-template-columns: repeat(4, minmax(112px, 1fr)); gap: 10px; }
 .summary-stat { background: var(--bg-stat); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 9px 10px; text-align: center; }
 .summary-stat-label { font-size: 10px; color: var(--text-faint); }
 .summary-stat-value { font-size: 17px; font-weight: 600; margin-top: 2px; }
@@ -156,7 +157,7 @@ body { background: var(--bg-page); color: var(--text-primary); transition: backg
 .market-rank-actions small { font-size: 9px; color: var(--text-faint); }
 @media (max-width: 1050px) {
   .market-ranking-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .summary-stats { grid-template-columns: repeat(3, minmax(112px, 1fr)); }
+  .summary-stats { grid-template-columns: repeat(4, minmax(112px, 1fr)); }
 }
 @media (max-width: 760px) {
   .market-ranking-list { grid-template-columns: 1fr; }
@@ -341,6 +342,12 @@ table.history-table tr:last-child td { border-bottom: none; }
     justify-content: space-between;
     width: 100%;
   }
+  .header-invest-controls {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
   .account-mode-pill, .theme-toggle, .status {
     width: 100%;
     justify-content: center;
@@ -369,7 +376,6 @@ table.history-table tr:last-child td { border-bottom: none; }
   .summary-bar, .market-ranking-section, .markets { margin-left: 10px; margin-right: 10px; padding-left: 0; padding-right: 0; }
   .summary-bar { padding: 12px; border-radius: 18px; }
   .summary-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .summary-stat:first-child { grid-column: 1 / -1; }
   .opportunity-grid, .backtest-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .summary-stat { padding: 10px 8px; }
   .summary-stat-value { font-size: 16px; }
@@ -435,6 +441,7 @@ table.history-table tr:last-child td { border-bottom: none; }
     font-size: 9px;
   }
   .config-row { grid-template-columns: 1fr; }
+  .header-invest-controls { grid-template-columns: 1fr; }
   .trade-plan { grid-template-columns: 1fr; }
 }
 
@@ -497,6 +504,22 @@ table.history-table tr:last-child td { border-bottom: none; }
       <span id="balance-label">Saldo demo (Deriv):</span>
       <span class="balance-value" id="balance-value">Cargando...</span>
     </div>
+    <div class="header-invest-controls">
+      <div class="invest-mode">
+        <label class="radio-label">
+          <input type="radio" name="modo-inversion" value="porcentaje" checked onchange="cambiarModoInversion('porcentaje')">
+          % del saldo
+        </label>
+        <input type="number" id="risk-input" value="1" min="0.1" max="10" step="0.1" onchange="actualizarRiesgoPorcentaje(this.value)">
+      </div>
+      <div class="invest-mode">
+        <label class="radio-label">
+          <input type="radio" name="modo-inversion" value="fijo" onchange="cambiarModoInversion('fijo')">
+          Monto fijo ($)
+        </label>
+        <input type="number" id="fixed-input" value="10" min="1" step="1" disabled oninput="actualizarMontoFijo(this.value)">
+      </div>
+    </div>
     <div class="status">
       <div class="dot"></div>
       <span>Conectado</span>
@@ -522,10 +545,6 @@ table.history-table tr:last-child td { border-bottom: none; }
     <div class="summary-stat">
       <div class="summary-stat-label">Win rate</div>
       <div class="summary-stat-value" id="hist-winrate">—</div>
-    </div>
-    <div class="summary-stat">
-      <div class="summary-stat-label" id="hist-balance-label">Saldo demo</div>
-      <div class="summary-stat-value" id="hist-saldo-sim">$10,000.00</div>
     </div>
   </div>
   <div class="production-panel">
@@ -588,23 +607,6 @@ table.history-table tr:last-child td { border-bottom: none; }
         <option value="14" selected>14 (recomendado)</option>
         <option value="21">21 (lento)</option>
       </select>
-    </div>
-
-    <div class="divider"></div>
-
-    <div class="invest-mode">
-      <label class="radio-label">
-        <input type="radio" name="modo-inversion" value="porcentaje" checked onchange="cambiarModoInversion('porcentaje')">
-        % del saldo
-      </label>
-      <input type="number" id="risk-input" value="1" min="0.1" max="10" step="0.1" onchange="actualizarRiesgoPorcentaje(this.value)">
-    </div>
-    <div class="invest-mode">
-      <label class="radio-label">
-        <input type="radio" name="modo-inversion" value="fijo" onchange="cambiarModoInversion('fijo')">
-        Monto fijo ($)
-      </label>
-      <input type="number" id="fixed-input" value="10" min="1" step="1" disabled oninput="actualizarMontoFijo(this.value)">
     </div>
 
     <button class="btn-add" id="btn-add-market" onclick="agregarMercado()">+ Agregar</button>

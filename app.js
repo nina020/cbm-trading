@@ -1032,13 +1032,6 @@ function registrarLogAuto(mensaje, tipo) {
 }
 
 function actualizarStatsBalance() {
-  const cuentaActual = modoEjecucion === 'real' ? 'real' : 'demo';
-  const labelSaldo = document.getElementById('hist-balance-label');
-  if (labelSaldo) labelSaldo.textContent = cuentaActual === 'real' ? 'Saldo real' : 'Saldo demo';
-  const saldoEl = document.getElementById('hist-saldo-sim');
-  const saldoInicial = saldosInicialesPorCuenta[cuentaActual];
-  saldoEl.textContent = '$' + saldoReal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
-  saldoEl.style.color = saldoInicial === null ? 'var(--text-primary)' : (saldoReal >= saldoInicial ? '#26a69a' : '#ef5350');
   renderResumenEjecuciones(executionJournal?.registros || []);
 }
 
