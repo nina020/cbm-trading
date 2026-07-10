@@ -1,3 +1,5 @@
+import { SL_DESVIACIONES, TP_DESVIACIONES } from '../config.js';
+
 export function calcularMA(precios) {
   return precios.reduce((total, precio) => total + precio, 0) / precios.length;
 }
@@ -24,10 +26,18 @@ export function calcularDesviacion(precios, media) {
 
 export function evaluarSenal({ precio, ma, rsi, desviacion }) {
   if (precio > ma && rsi < 70) {
-    return { tipo: 'BUY', sl: precio - desviacion * 2, tp: precio + desviacion * 3 };
+    return {
+      tipo: 'BUY',
+      sl: precio - desviacion * SL_DESVIACIONES,
+      tp: precio + desviacion * TP_DESVIACIONES,
+    };
   }
   if (precio < ma && rsi > 30) {
-    return { tipo: 'SELL', sl: precio + desviacion * 2, tp: precio - desviacion * 3 };
+    return {
+      tipo: 'SELL',
+      sl: precio + desviacion * SL_DESVIACIONES,
+      tp: precio - desviacion * TP_DESVIACIONES,
+    };
   }
   return { tipo: 'WAIT', sl: null, tp: null };
 }

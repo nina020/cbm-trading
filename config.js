@@ -1,5 +1,9 @@
 export const INTERVALO_VELA = 5;
 export const RATIO_RECOMPENSA = 1.5;
+// Distancias de salida en desviaciones estándar de la ventana de ticks.
+// TP debe ser SL * RATIO_RECOMPENSA para conservar el ratio riesgo/recompensa.
+export const SL_DESVIACIONES = 3;
+export const TP_DESVIACIONES = SL_DESVIACIONES * RATIO_RECOMPENSA;
 export const FRACCION_RIESGO_STAKE = 0.25;
 export const MULTIPLICADOR_DEFAULT = 100;
 export const EXECUTION_STORAGE_KEY = 'cbm_ejecuciones_v2';

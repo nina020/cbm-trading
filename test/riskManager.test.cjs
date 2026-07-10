@@ -55,6 +55,27 @@ test('los objetivos monetarios son proporcionales a la inversión', async () => 
   assert.equal(objetivos[1].objetivo / objetivos[0].objetivo, 4);
 });
 
+test('la señal coloca SL y TP a las desviaciones configuradas conservando el ratio', async () => {
+  const { evaluarSenal } = await cargarModulo(
+    path.join(__dirname, '../trading/strategy.js'),
+  );
+  const config = await cargarModulo(path.join(__dirname, '../config.js'));
+  const desviacion = 0.4;
+  const senal = evaluarSenal({ precio: 100, ma: 99, rsi: 55, desviacion });
+
+  assert.equal(senal.tipo, 'BUY');
+  assert.equal(senal.sl, 100 - desviacion * config.SL_DESVIACIONES);
+  assert.equal(senal.tp, 100 + desviacion * config.TP_DESVIACIONES);
+  assert.ok(
+    Math.abs((senal.tp - 100) / (100 - senal.sl) - config.RATIO_RECOMPENSA) < 1e-9,
+  );
+
+  const venta = evaluarSenal({ precio: 100, ma: 101, rsi: 45, desviacion });
+  assert.equal(venta.tipo, 'SELL');
+  assert.equal(venta.sl, 100 + desviacion * config.SL_DESVIACIONES);
+  assert.equal(venta.tp, 100 - desviacion * config.TP_DESVIACIONES);
+});
+
 test('la orden demo usa los mismos objetivos monetarios que la simulación', async () => {
   const { crearPayload } = await cargarModulo(
     path.join(__dirname, '../trading/orderService.js'),

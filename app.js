@@ -1,5 +1,6 @@
 import {
   INTERVALO_VELA, RATIO_RECOMPENSA, MULTIPLICADOR_DEFAULT,
+  SL_DESVIACIONES, TP_DESVIACIONES,
   EXECUTION_STORAGE_KEY, SIGNAL_CONFIG_STORAGE_KEY, STRATEGY_CONFIG_STORAGE_KEY,
   GLOBAL_RISK_STORAGE_KEY, ORDER_AUDIT_STORAGE_KEY, NOMBRES_SIMBOLOS, MERCADOS_ESTABLES, TEMAS,
 } from './config.js';
@@ -583,8 +584,12 @@ function notificarOportunidadReal({ mercadoId, nombre, tipo, puntuacion, entrada
 function mostrarOportunidadFueraHorario({ mercadoId, nombre, tipo, puntuacion, entrada, origen = 'offhours' }) {
   const mercado = mercadosActivos[mercadoId];
   const desviacion = Number(mercado?.desviacion) || 0;
-  const sl = tipo === 'BUY' ? entrada - desviacion * 2 : entrada + desviacion * 2;
-  const tp = tipo === 'BUY' ? entrada + desviacion * 3 : entrada - desviacion * 3;
+  const sl = tipo === 'BUY'
+    ? entrada - desviacion * SL_DESVIACIONES
+    : entrada + desviacion * SL_DESVIACIONES;
+  const tp = tipo === 'BUY'
+    ? entrada + desviacion * TP_DESVIACIONES
+    : entrada - desviacion * TP_DESVIACIONES;
   const inversion = calcularInversionSugerida();
   const objetivos = calcularObjetivosMonetarios(inversion);
 
@@ -1964,8 +1969,12 @@ async function agregarMercado(mercadoId = null, opciones = {}) {
           renderRankingMercados();
         }
         const tipoSenal = resultadoSenal.tipo;
-        const sl = tipoSenal === 'BUY' ? precio - desv * 2 : precio + desv * 2;
-        const tp = tipoSenal === 'BUY' ? precio + desv * 3 : precio - desv * 3;
+        const sl = tipoSenal === 'BUY'
+          ? precio - desv * SL_DESVIACIONES
+          : precio + desv * SL_DESVIACIONES;
+        const tp = tipoSenal === 'BUY'
+          ? precio + desv * TP_DESVIACIONES
+          : precio - desv * TP_DESVIACIONES;
 
         const configMercado = obtenerSignalConfigMercado(id);
         const reglasEstrategia = evaluarReglasEstrategia({
