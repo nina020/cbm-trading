@@ -710,16 +710,18 @@ table.history-table tr:last-child td { border-bottom: none; }
     <div class="config-group period">
       <label>Periodo</label>
       <select id="select-periodo">
-        <option value="7">7 (rápido)</option>
-        <option value="14" selected>14 (recomendado)</option>
-        <option value="21">21 (lento)</option>
+        <option value="7">7 (muy rápido)</option>
+        <option value="14">14 (rápido)</option>
+        <option value="21">21 (medio)</option>
+        <option value="30">30 (lento)</option>
+        <option value="50" selected>50 (recomendado)</option>
       </select>
     </div>
 
     <button class="btn-add" id="btn-add-market" onclick="agregarMercado()">+ Agregar</button>
   </div>
 
-  <div class="storage-note">💾 El historial de señales se guarda automáticamente en este navegador y persiste al recargar la página.</div>
+  <div class="storage-note">💾 El registro de ejecuciones y la configuración se guardan automáticamente y se sincronizan entre tus computadoras.</div>
 </div>
 
 <div class="market-ranking-section">
