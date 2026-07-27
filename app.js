@@ -1,6 +1,6 @@
 import {
   INTERVALO_VELA, RATIO_RECOMPENSA, MULTIPLICADOR_DEFAULT,
-  SL_DESVIACIONES, TP_DESVIACIONES,
+  SL_DESVIACIONES, TP_DESVIACIONES, PERIODO_EMA,
   EXECUTION_STORAGE_KEY, SIGNAL_CONFIG_STORAGE_KEY, STRATEGY_CONFIG_STORAGE_KEY,
   GLOBAL_RISK_STORAGE_KEY, ORDER_AUDIT_STORAGE_KEY, NOMBRES_SIMBOLOS, MERCADOS_ESTABLES, TEMAS,
 } from './config.js';
@@ -18,7 +18,7 @@ import { createAutoTrader } from './trading/autoTrader.js';
 import { createExecutionJournal } from './trading/executionJournal.js';
 import { createOrderAudit } from './trading/orderAudit.js';
 import { ejecutarOrdenDemo, extraerCostosReportados } from './trading/orderService.js';
-import { calcularMA, calcularRSI, calcularDesviacion, evaluarSenal, detectarSoporteResistencia } from './trading/strategy.js';
+import { calcularMA, calcularRSI, calcularDesviacion, calcularEMA, evaluarSenal, detectarSoporteResistencia, clasificarTendencia } from './trading/strategy.js';
 import {
   SIGNAL_CONFIG_DEFAULTS, createSignalTrigger, normalizarSignalConfig, puntuarSenal,
 } from './trading/signalScorer.js';
@@ -1778,7 +1778,7 @@ function renderPlan(entrada, sl, tp, tipo, mercadoId, calidad) {
   `;
 }
 
-function actualizarTarjeta(id, precio, ma, rsi, hora, periodo, desv, precios, soporte = null, resistencia = null) {
+function actualizarTarjeta(id, precio, ma, rsi, hora, periodo, desv, precios, soporte = null, resistencia = null, tendencia = 'lateral') {
   const el = document.getElementById(`card-${id}`);
   if (!el) return 'WAIT';
   el.querySelector('.precio').textContent = precio.toLocaleString();
@@ -1787,12 +1787,21 @@ function actualizarTarjeta(id, precio, ma, rsi, hora, periodo, desv, precios, so
   el.querySelector('.card-time').textContent = hora;
   el.querySelector('.ticks').textContent = `${periodo}/${periodo}`;
 
+  // Mostrar tendencia detectada — icono y color para que sea visible de un vistazo.
+  const tendenciaEl = el.querySelector('.tendencia');
+  if (tendenciaEl) {
+    const icono = tendencia === 'alcista' ? '▲' : tendencia === 'bajista' ? '▼' : '→';
+    const color = tendencia === 'alcista' ? '#22c55e' : tendencia === 'bajista' ? '#ef4444' : '#94a3b8';
+    tendenciaEl.textContent = `${icono} ${tendencia}`;
+    tendenciaEl.style.color = color;
+  }
+
   const maNum = parseFloat(ma);
   const rsiNum = parseFloat(rsi);
   let html = '';
   let tipoSenal = 'WAIT';
 
-  const senal = evaluarSenal({ precio, ma: maNum, rsi: rsiNum, desviacion: desv, soporte, resistencia });
+  const senal = evaluarSenal({ precio, ma: maNum, rsi: rsiNum, desviacion: desv, soporte, resistencia, tendencia });
   const calidad = puntuarSenal({
     tipo: senal.tipo,
     precio,
@@ -1897,8 +1906,10 @@ async function agregarMercado(mercadoId = null, opciones = {}) {
     actualizarPanelAutomatico(id);
     const wsUrl = await obtenerWsUrl();
     const precios = [];
-    // Historial largo para RSI (5x periodo) y detección de soporte/resistencia.
+    // Historial largo para RSI (5x periodo), soporte/resistencia y EMA de tendencia.
     const preciosHistorico = [];
+    // Buffer separado para la EMA de tendencia (necesita PERIODO_EMA precios como mínimo).
+    const preciosEma = [];
     let velaActual = null;
     let tiempoVelaActual = null;
     let ultimaSenal = 'WAIT';
@@ -1937,6 +1948,8 @@ async function agregarMercado(mercadoId = null, opciones = {}) {
         precios.push(precio);
         preciosHistorico.push(precio);
         if (preciosHistorico.length > periodo * 5) preciosHistorico.shift();
+        preciosEma.push(precio);
+        if (preciosEma.length > PERIODO_EMA * 2) preciosEma.shift();
 
         const el = document.getElementById(`card-${id}`);
         if (el) el.querySelector('.ticks').textContent =
@@ -1959,10 +1972,11 @@ async function agregarMercado(mercadoId = null, opciones = {}) {
         const rsi = calcularRSI(preciosHistorico, periodo);
         const desv = calcularDesviacion(precios, ma);
         const { soporte, resistencia } = detectarSoporteResistencia(preciosHistorico);
+        const tendencia = clasificarTendencia(preciosEma, PERIODO_EMA);
 
         maSeries.update({ time: tiempoVela, value: ma });
         const resultadoSenal = actualizarTarjeta(
-          id, precio, ma.toFixed(4), rsi, hora, periodo, desv, precios, soporte, resistencia,
+          id, precio, ma.toFixed(4), rsi, hora, periodo, desv, precios, soporte, resistencia, tendencia,
         );
         if (mercadosActivos[id]) {
           Object.assign(mercadosActivos[id], {

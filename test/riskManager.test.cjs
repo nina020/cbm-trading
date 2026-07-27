@@ -1343,3 +1343,102 @@ test('evaluarPatronesVela baja la puntuación cuando el patrón contradice la se
   const resultado = evaluarPatronesVela(velas, 'BUY');
   assert.ok(resultado.bonificacion < 0, 'debe dar bonificación negativa');
 });
+
+// ── Tendencia y EMA (críticos 1 y 3 del ebook) ───────────────────────────────
+
+test('calcularEMA devuelve el precio inicial con un solo dato', async () => {
+  const { calcularEMA } = await cargarModulo(path.join(__dirname, '../trading/strategy.js'));
+  assert.equal(calcularEMA([100], 14), 100);
+});
+
+test('calcularEMA pondera más los datos recientes que la MA simple', async () => {
+  const { calcularEMA, calcularMA } = await cargarModulo(path.join(__dirname, '../trading/strategy.js'));
+  const precios = [100, 100, 100, 100, 100, 110];
+  const ema = calcularEMA(precios, 5);
+  const ma = calcularMA(precios);
+  assert.ok(ema > ma, 'EMA debe ser mayor que MA cuando los datos recientes suben');
+});
+
+test('clasificarTendencia detecta tendencia alcista cuando precio > EMA y hay HH/HL', async () => {
+  const { clasificarTendencia } = await cargarModulo(path.join(__dirname, '../trading/strategy.js'));
+  const precios = Array.from({ length: 30 }, (_, i) => 100 + i * 0.5 + (i % 3 === 0 ? -0.2 : 0));
+  const resultado = clasificarTendencia(precios, 20);
+  assert.equal(resultado, 'alcista');
+});
+
+test('clasificarTendencia detecta tendencia bajista cuando precio < EMA', async () => {
+  const { clasificarTendencia } = await cargarModulo(path.join(__dirname, '../trading/strategy.js'));
+  const precios = Array.from({ length: 30 }, (_, i) => 100 - i * 0.5);
+  const resultado = clasificarTendencia(precios, 20);
+  assert.equal(resultado, 'bajista');
+});
+
+test('clasificarTendencia devuelve lateral con historial insuficiente', async () => {
+  const { clasificarTendencia } = await cargarModulo(path.join(__dirname, '../trading/strategy.js'));
+  assert.equal(clasificarTendencia([100, 101, 99], 20), 'lateral');
+});
+
+test('evaluarSenal bloquea BUY en tendencia bajista', async () => {
+  const { evaluarSenal } = await cargarModulo(path.join(__dirname, '../trading/strategy.js'));
+  const resultado = evaluarSenal({
+    precio: 102, ma: 100, rsi: 50, desviacion: 2, tendencia: 'bajista',
+  });
+  assert.equal(resultado.tipo, 'WAIT');
+});
+
+test('evaluarSenal bloquea SELL en tendencia alcista', async () => {
+  const { evaluarSenal } = await cargarModulo(path.join(__dirname, '../trading/strategy.js'));
+  const resultado = evaluarSenal({
+    precio: 98, ma: 100, rsi: 50, desviacion: 2, tendencia: 'alcista',
+  });
+  assert.equal(resultado.tipo, 'WAIT');
+});
+
+test('evaluarSenal permite BUY en tendencia alcista', async () => {
+  const { evaluarSenal } = await cargarModulo(path.join(__dirname, '../trading/strategy.js'));
+  const resultado = evaluarSenal({
+    precio: 102, ma: 100, rsi: 50, desviacion: 2, tendencia: 'alcista',
+  });
+  assert.equal(resultado.tipo, 'BUY');
+  assert.equal(resultado.tendencia, 'alcista');
+});
+
+test('evaluarSenal permite SELL en tendencia bajista', async () => {
+  const { evaluarSenal } = await cargarModulo(path.join(__dirname, '../trading/strategy.js'));
+  const resultado = evaluarSenal({
+    precio: 98, ma: 100, rsi: 50, desviacion: 2, tendencia: 'bajista',
+  });
+  assert.equal(resultado.tipo, 'SELL');
+  assert.equal(resultado.tendencia, 'bajista');
+});
+
+// ── Contexto de patrón de vela (crítico 2 del ebook) ─────────────────────────
+
+test('evaluarPatronesVela ignora Martillo sin caída previa', async () => {
+  const { evaluarPatronesVela } = await cargarModulo(path.join(__dirname, '../trading/candlePatterns.js'));
+  const velasMartillo = [
+    { open: 100, close: 101, high: 101.5, low: 96 },
+    { open: 102, close: 103, high: 103.5, low: 101 },
+    { open: 103, close: 104, high: 104.5, low: 102 },
+    { open: 104, close: 105, high: 105.5, low: 103 },
+    { open: 105, close: 106, high: 106.5, low: 104 },
+    { open: 106, close: 107, high: 107.2, low: 102 },
+  ];
+  const resultado = evaluarPatronesVela(velasMartillo, 'BUY');
+  assert.equal(resultado.patronAlcista, null, 'Martillo sin caída previa no debe contar');
+});
+
+test('evaluarPatronesVela detecta Martillo con caída previa', async () => {
+  const { evaluarPatronesVela } = await cargarModulo(path.join(__dirname, '../trading/candlePatterns.js'));
+  // Martillo válido: cuerpo pequeño arriba, mecha inferior >= 2x cuerpo, mecha superior <= 0.5x cuerpo.
+  const velasConCaida = [
+    { open: 107, close: 105, high: 107.5, low: 104 },
+    { open: 105, close: 103, high: 105.5, low: 102 },
+    { open: 103, close: 101, high: 103.5, low: 100 },
+    { open: 101, close: 100, high: 101.5, low: 99  },
+    { open: 100.8, close: 101, high: 101.1, low: 96 },
+  ];
+  const resultado = evaluarPatronesVela(velasConCaida, 'BUY');
+  assert.equal(resultado.patronAlcista, 'Martillo');
+  assert.ok(resultado.bonificacion > 0);
+});

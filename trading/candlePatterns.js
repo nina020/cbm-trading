@@ -109,27 +109,46 @@ export function esTresCuervos(velas) {
 /**
  * Evalúa el historial de velas y devuelve el patrón detectado y
  * una bonificación de puntos para la señal actual.
+ *
+ * CRÍTICO: valida el CONTEXTO del patrón antes de bonificar.
+ * El ebook indica que un Martillo solo vale si hay una caída previa,
+ * y un patrón bajista solo vale si hay una subida previa.
+ * Sin ese contexto, el patrón no tiene valor y no suma puntos.
  */
 export function evaluarPatronesVela(velas, tipoSenal) {
   if (!velas || velas.length < 1) {
     return { patronAlcista: null, patronBajista: null, bonificacion: 0 };
   }
   const ultima = velas[velas.length - 1];
+
+  // Contexto previo: mayoría de velas bajistas antes = caída previa, y viceversa.
+  const previas = velas.slice(-6, -1);
+  const bajistasAnt = previas.filter(v => v.close < v.open).length;
+  const alcistasAnt = previas.filter(v => v.close > v.open).length;
+  const hayCalidaPrevia = bajistasAnt > alcistasAnt;
+  const haySubidaPrevia = alcistasAnt > bajistasAnt;
+
   let patronAlcista = null;
   let patronBajista = null;
 
-  if (esTresSoldados(velas))            patronAlcista = 'Tres soldados blancos';
-  else if (esEstrellaMannana(velas))    patronAlcista = 'Estrella de la manana';
-  else if (esEnvolventeAlcista(velas))  patronAlcista = 'Envolvente alcista';
-  else if (esMartillo(ultima))          patronAlcista = 'Martillo';
-  else if (esMarubozuAlcista(ultima))   patronAlcista = 'Marubozu alcista';
+  // Patrones alcistas solo valen con caída previa (contexto correcto).
+  if (hayCalidaPrevia) {
+    if (esTresSoldados(velas))            patronAlcista = 'Tres soldados blancos';
+    else if (esEstrellaMannana(velas))    patronAlcista = 'Estrella de la manana';
+    else if (esEnvolventeAlcista(velas))  patronAlcista = 'Envolvente alcista';
+    else if (esMartillo(ultima))          patronAlcista = 'Martillo';
+    else if (esMarubozuAlcista(ultima))   patronAlcista = 'Marubozu alcista';
+  }
 
-  if (esTresCuervos(velas))                              patronBajista = 'Tres cuervos negros';
-  else if (esEstrellaTarde(velas))                       patronBajista = 'Estrella de la tarde';
-  else if (esEnvolventeBajista(velas))                  patronBajista = 'Envolvente bajista';
-  else if (esPinBarBajista(ultima))                      patronBajista = 'Pin bar bajista';
-  else if (esMarubozuBajista(ultima))                    patronBajista = 'Marubozu bajista';
-  else if (esHombreColgado(ultima) && esAlcista(ultima)) patronBajista = 'Hombre colgado';
+  // Patrones bajistas solo valen con subida previa (contexto correcto).
+  if (haySubidaPrevia) {
+    if (esTresCuervos(velas))                              patronBajista = 'Tres cuervos negros';
+    else if (esEstrellaTarde(velas))                       patronBajista = 'Estrella de la tarde';
+    else if (esEnvolventeBajista(velas))                   patronBajista = 'Envolvente bajista';
+    else if (esPinBarBajista(ultima))                      patronBajista = 'Pin bar bajista';
+    else if (esMarubozuBajista(ultima))                    patronBajista = 'Marubozu bajista';
+    else if (esHombreColgado(ultima) && esAlcista(ultima)) patronBajista = 'Hombre colgado';
+  }
 
   let bonificacion = 0;
   const fuerte = p => p && (p.includes('soldados') || p.includes('tarde') || p.includes('mannana') || p.includes('cuervos'));

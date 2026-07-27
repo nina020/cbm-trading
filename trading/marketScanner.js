@@ -1,7 +1,9 @@
 import {
-  calcularMA, calcularRSI, calcularDesviacion, evaluarSenal, detectarSoporteResistencia,
+  calcularMA, calcularRSI, calcularDesviacion, calcularEMA,
+  evaluarSenal, detectarSoporteResistencia, clasificarTendencia,
 } from './strategy.js';
 import { puntuarSenal } from './signalScorer.js';
+import { PERIODO_EMA } from '../config.js';
 
 export function analizarMercadoHistorico({ mercado, ticks, periodo = 14 }) {
   const preciosDisponibles = ticks
@@ -15,12 +17,12 @@ export function analizarMercadoHistorico({ mercado, ticks, periodo = 14 }) {
 
   const precio = precios[precios.length - 1];
   const media = calcularMA(precios);
-  // RSI con historial extendido (5x periodo) para que el suavizado de Wilder converja.
   const historialRsi = preciosDisponibles.slice(-periodo * 5);
   const rsi = calcularRSI(historialRsi, periodo);
   const desviacion = calcularDesviacion(precios, media);
   const { soporte, resistencia } = detectarSoporteResistencia(preciosDisponibles);
-  const senal = evaluarSenal({ precio, ma: media, rsi, desviacion, soporte, resistencia });
+  const tendencia = clasificarTendencia(preciosDisponibles, PERIODO_EMA);
+  const senal = evaluarSenal({ precio, ma: media, rsi, desviacion, soporte, resistencia, tendencia });
   const calidad = puntuarSenal({
     tipo: senal.tipo,
     precio,
@@ -36,6 +38,7 @@ export function analizarMercadoHistorico({ mercado, ticks, periodo = 14 }) {
     desviacion,
     calidad: calidad.puntuacion,
     tipoSenal: senal.tipo,
+    tendencia,
   };
 }
 

@@ -30,6 +30,7 @@ export function createMarketCard({ id, nombre, perfil, periodo, chartTheme }) {
       <div class="stat"><div class="stat-label">Precio</div><div class="stat-value precio">—</div></div>
       <div class="stat"><div class="stat-label">MA (${periodo})</div><div class="stat-value ma">—</div></div>
       <div class="stat"><div class="stat-label">RSI (${periodo})</div><div class="stat-value rsi">—</div></div>
+      <div class="stat"><div class="stat-label">Tendencia</div><div class="stat-value tendencia" style="font-weight:500">—</div></div>
       <div class="stat"><div class="stat-label">Ticks</div><div class="stat-value ticks">0/${periodo}</div></div>
     </div>
     <div class="auto-toggle-row">

@@ -1,7 +1,19 @@
-import { SL_DESVIACIONES, TP_DESVIACIONES, FILTRO_RUIDO_DESVIACIONES } from '../config.js';
+import { SL_DESVIACIONES, TP_DESVIACIONES, FILTRO_RUIDO_DESVIACIONES, PERIODO_EMA } from '../config.js';
 
 export function calcularMA(precios) {
   return precios.reduce((total, precio) => total + precio, 0) / precios.length;
+}
+
+// EMA (Media Móvil Exponencial) — más reactiva que la MA simple porque
+// pondera más los datos recientes. Usada como filtro de tendencia general.
+export function calcularEMA(precios, periodo) {
+  if (precios.length === 0) return null;
+  const k = 2 / (periodo + 1);
+  let ema = precios[0];
+  for (let i = 1; i < precios.length; i++) {
+    ema = precios[i] * k + ema * (1 - k);
+  }
+  return ema;
 }
 
 // RSI con suavizado de Wilder (estándar de TradingView y la mayoría de plataformas).
@@ -97,11 +109,65 @@ export function detectarSoporteResistencia(precios, margen = 0.002) {
   return { soporte, resistencia };
 }
 
+/**
+ * Clasifica la tendencia general del mercado usando la EMA larga y la
+ * estructura de máximos y mínimos (HH/HL = alcista, LH/LL = bajista).
+ *
+ * Retorna:
+ *   'alcista'  — precio sobre la EMA y estructura de máximos crecientes
+ *   'bajista'  — precio bajo la EMA y estructura de mínimos decrecientes
+ *   'lateral'  — señales contradictorias o historial insuficiente
+ *
+ * El ebook de Billy Chacón usa la EMA 200 como referencia principal (Módulo 2):
+ *   precio > EMA 200 → buscar compras (no ventas)
+ *   precio < EMA 200 → buscar ventas (no compras)
+ */
+export function clasificarTendencia(precios, periodoEma = PERIODO_EMA) {
+  if (precios.length < 20) return 'lateral';
+
+  const precio = precios[precios.length - 1];
+  const ema = calcularEMA(precios, periodoEma);
+
+  // Estructura: comparar los últimos 3 máximos y mínimos locales.
+  const maximos = [];
+  const minimos = [];
+  for (let i = 1; i < precios.length - 1; i++) {
+    if (precios[i] > precios[i - 1] && precios[i] > precios[i + 1]) maximos.push(precios[i]);
+    if (precios[i] < precios[i - 1] && precios[i] < precios[i + 1]) minimos.push(precios[i]);
+  }
+
+  const ultimosMax = maximos.slice(-3);
+  const ultimosMin = minimos.slice(-3);
+
+  // Máximos crecientes (HH) y mínimos crecientes (HL) → estructura alcista.
+  const hhhl = ultimosMax.length >= 2
+    && ultimosMax[ultimosMax.length - 1] > ultimosMax[ultimosMax.length - 2]
+    && (ultimosMin.length < 2 || ultimosMin[ultimosMin.length - 1] > ultimosMin[ultimosMin.length - 2]);
+
+  // Máximos decrecientes (LH) y mínimos decrecientes (LL) → estructura bajista.
+  const lhll = ultimosMin.length >= 2
+    && ultimosMin[ultimosMin.length - 1] < ultimosMin[ultimosMin.length - 2]
+    && (ultimosMax.length < 2 || ultimosMax[ultimosMax.length - 1] < ultimosMax[ultimosMax.length - 2]);
+
+  const sobreEma = ema !== null && precio > ema;
+  const bajoEma = ema !== null && precio < ema;
+
+  if (sobreEma && hhhl) return 'alcista';
+  if (bajoEma && lhll) return 'bajista';
+
+  // EMA como desempate cuando la estructura no es concluyente.
+  if (sobreEma) return 'alcista';
+  if (bajoEma) return 'bajista';
+
+  return 'lateral';
+}
+
 export function evaluarSenal({
   precio, ma, rsi, desviacion,
   filtroRuido = FILTRO_RUIDO_DESVIACIONES,
   soporte = null,
   resistencia = null,
+  tendencia = 'lateral',
 }) {
   const desv = Number(desviacion) || 0;
   const distancia = Math.abs(Number(precio) - Number(ma));
@@ -112,7 +178,11 @@ export function evaluarSenal({
   }
 
   if (precio > ma && rsi < 70) {
-    // Filtro 2: no comprar si el precio está a menos del 1% de una resistencia.
+    // Filtro crítico: no comprar en tendencia bajista (Módulo 2 del ebook).
+    if (tendencia === 'bajista') {
+      return { tipo: 'WAIT', sl: null, tp: null };
+    }
+    // Filtro 2: no comprar a menos del 1% de una resistencia.
     if (resistencia !== null && precio >= resistencia * (1 - 0.01)) {
       return { tipo: 'WAIT', sl: null, tp: null };
     }
@@ -122,11 +192,16 @@ export function evaluarSenal({
       tp: precio + desv * TP_DESVIACIONES,
       soporte,
       resistencia,
+      tendencia,
     };
   }
 
   if (precio < ma && rsi > 30) {
-    // Filtro 3: no vender si el precio está a menos del 1% de un soporte.
+    // Filtro crítico: no vender en tendencia alcista (Módulo 2 del ebook).
+    if (tendencia === 'alcista') {
+      return { tipo: 'WAIT', sl: null, tp: null };
+    }
+    // Filtro 3: no vender a menos del 1% de un soporte.
     if (soporte !== null && precio <= soporte * (1 + 0.01)) {
       return { tipo: 'WAIT', sl: null, tp: null };
     }
@@ -136,6 +211,7 @@ export function evaluarSenal({
       tp: precio - desv * TP_DESVIACIONES,
       soporte,
       resistencia,
+      tendencia,
     };
   }
 
