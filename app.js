@@ -1840,7 +1840,23 @@ function renderPlan(entrada, sl, tp, tipo, mercadoId, calidad) {
     </div>
     <div class="trade-plan-ratio">Riesgo máximo: $${riesgoMonetario.toFixed(2)} · Objetivo: $${objetivoMonetario.toFixed(2)} · Relación 1 : ${RATIO_RECOMPENSA}</div>
     <div class="signal-quality signal-quality-${calidad.nivel}">
-      Calidad estimada: <b>${calidad.puntuacion}/100</b> · ${calidad.nivel}
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span><b>${calidad.puntuacion}/100</b> · ${calidad.nivel}</span>
+        <span style="font-size:10px;opacity:.8">${calidad.confluencia ?? 0}/4 factores activos</span>
+      </div>
+      ${calidad.factores && calidad.factores.length ? `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:3px;margin-top:6px">
+        ${calidad.factores.map(f => {
+          const pct = Math.max(0, Math.min(100, f.maximo > 0 ? Math.round((Math.abs(f.puntos) / f.maximo) * 100) : 0));
+          const color = f.puntos < 0 ? '#ef4444' : pct >= 60 ? '#22c55e' : '#f59e0b';
+          return `<div style="display:flex;justify-content:space-between;align-items:center;font-size:10px;padding:3px 6px;border-radius:3px;background:rgba(0,0,0,.04)">
+            <span style="color:var(--text-secondary)">${f.nombre}</span>
+            <div style="height:3px;width:50px;background:var(--border);border-radius:2px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${color};border-radius:2px"></div></div>
+          </div>`;
+        }).join('')}
+      </div>` : ''}
+      ${calidad.patronAlcista ? `<div style="margin-top:4px;font-size:10px;color:#16a06a">▲ ${calidad.patronAlcista}</div>` : ''}
+      ${calidad.patronBajista ? `<div style="margin-top:4px;font-size:10px;color:#e0483d">▼ ${calidad.patronBajista}</div>` : ''}
     </div>
     <button id="${btnId}" class="${btnClass}" onclick="ejecutarOperacion('${mercadoId}', '${tipo}', ${entrada}, ${sl}, ${tp}, '${btnId}')">${accionTexto}</button>
   `;
@@ -1896,7 +1912,12 @@ function actualizarTarjeta(id, precio, ma, rsi, hora, periodo, desv, precios, so
     const { sl, tp } = senal;
     html = '<div class="signal signal-sell">▼ SELL</div>' + renderPlan(precio, sl, tp, 'SELL', id, calidad);
   } else {
-    html = '<div class="signal signal-wait">— Esperar</div>';
+    const motivoEspera = enRango
+      ? `⊡ Rango detectado — señales desactivadas${razonRango ? ': ' + razonRango : ''}`
+      : tendencia === 'lateral'
+        ? '→ Mercado sin tendencia clara — esperando dirección'
+        : '— Esperando condiciones de entrada';
+    html = `<div class="signal signal-wait">${motivoEspera}</div>`;
   }
   el.querySelector('.signal-container').innerHTML = html;
 

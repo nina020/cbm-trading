@@ -31,7 +31,7 @@ export function createMarketCard({ id, nombre, perfil, periodo, chartTheme }) {
       <div class="stat"><div class="stat-label">MA (${periodo})</div><div class="stat-value ma">—</div></div>
       <div class="stat"><div class="stat-label">RSI (${periodo})</div><div class="stat-value rsi">—</div></div>
       <div class="stat"><div class="stat-label">Tendencia</div><div class="stat-value tendencia" style="font-weight:500">—</div></div>
-      <div class="stat"><div class="stat-label">Ticks</div><div class="stat-value ticks">0/${periodo}</div></div>
+      <div class="stat"><div class="stat-label">Velas</div><div class="stat-value ticks">0/${periodo}</div></div>
     </div>
     <div class="auto-toggle-row">
       <label class="auto-toggle-label">
@@ -42,7 +42,7 @@ export function createMarketCard({ id, nombre, perfil, periodo, chartTheme }) {
     <div class="auto-status auto-status-off" id="auto-status-${id}">
       <div class="auto-status-reason">Automático apagado.</div>
     </div>
-    <div class="signal-container"><div class="signal signal-loading">⏳ Recopilando datos...</div></div>
+    <div class="signal-container"><div class="signal signal-loading">⏳ Acumulando velas (0/${periodo})...</div></div>
   `;
 
   document.getElementById('markets').appendChild(div);
