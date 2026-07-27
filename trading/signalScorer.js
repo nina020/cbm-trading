@@ -39,7 +39,7 @@ export function normalizarSignalConfig(config = {}) {
 
 export function puntuarSenal({ tipo, precio, ma, rsi, desviacion, precios = [], velas = [] }) {
   if (!['BUY', 'SELL'].includes(tipo)) {
-    return { puntuacion: 0, nivel: 'sin señal', factores: [] };
+    return { puntuacion: 0, nivel: 'sin señal', factores: [], confluencia: 0 };
   }
 
   const direccion = tipo === 'BUY' ? 1 : -1;
@@ -63,19 +63,60 @@ export function puntuarSenal({ tipo, precio, ma, rsi, desviacion, precios = [], 
   const consistencia = cambios.length ? cambiosFavorables / cambios.length : 0;
   const puntosConsistencia = consistencia * 20;
 
+  // Fuerza del cuerpo de vela (Módulo 3 del ebook de Billy Chacón).
+  // Velas con cuerpo grande = mayor convicción. Se evalúa la última vela completa.
+  let puntosCuerpo = 0;
+  if (velas.length > 0) {
+    const ultimaVela = velas[velas.length - 1];
+    const cuerpoVela = Math.abs(ultimaVela.close - ultimaVela.open);
+    const rangoVela = ultimaVela.high - ultimaVela.low;
+    if (rangoVela > 0) {
+      const fuerza = cuerpoVela / rangoVela;
+      puntosCuerpo = limitar(fuerza, 0, 1) * 15;
+      // Vela en la dirección correcta = fuerza extra, contraria = resta.
+      const velaFavor = tipo === 'BUY'
+        ? ultimaVela.close > ultimaVela.open
+        : ultimaVela.close < ultimaVela.open;
+      if (!velaFavor) puntosCuerpo = -puntosCuerpo * 0.5;
+    }
+  }
+
   // Bonificación por patrones de velas japonesas (del ebook de Billy Chacón).
   // Suma hasta +20 si el patrón confirma la señal, resta hasta -20 si la contradice.
   const { patronAlcista, patronBajista, bonificacion: bonificacionPatron } =
     evaluarPatronesVela(velas, tipo);
 
+  // Confluencia: cuántos factores superan un umbral mínimo individualmente.
+  // El ebook (Módulo 5, checklist) exige mínimo 4 confirmaciones antes de entrar.
+  // Aquí medimos cuántos de los 4 factores principales superan el 50% de su máximo.
+  const factoresActivos = [
+    puntosTendencia > 15,     // tendencia clara (>50% de 30)
+    puntosRsi > 12,           // RSI en zona correcta (>50% de 25)
+    puntosMomentum > 12,      // momentum a favor (>50% de 25)
+    puntosConsistencia > 10,  // precio consistente (>50% de 20)
+  ].filter(Boolean).length;
+
   const puntuacion = Math.min(100, Math.max(0, Math.round(
-    puntosTendencia + puntosRsi + puntosMomentum + puntosConsistencia + bonificacionPatron,
+    puntosTendencia + puntosRsi + puntosMomentum + puntosConsistencia
+    + puntosCuerpo + bonificacionPatron,
   )));
-  const nivel = puntuacion >= 80 ? 'fuerte' : puntuacion >= 65 ? 'moderada' : 'débil';
+
+  // La señal necesita al menos 2 factores activos para considerarse válida.
+  // Con 0-1 factores activos la señal se marca como débil independientemente
+  // de la puntuación total, porque podría ser una coincidencia.
+  const confluenciaInsuficiente = factoresActivos < 2;
+  const puntuacionFinal = confluenciaInsuficiente
+    ? Math.min(puntuacion, 50)  // capping a 50 si no hay confluencia
+    : puntuacion;
+
+  const nivel = puntuacionFinal >= 80 ? 'fuerte'
+    : puntuacionFinal >= 65 ? 'moderada'
+    : 'débil';
 
   return {
-    puntuacion,
+    puntuacion: puntuacionFinal,
     nivel,
+    confluencia: factoresActivos,
     patronAlcista,
     patronBajista,
     factores: [
@@ -83,6 +124,7 @@ export function puntuarSenal({ tipo, precio, ma, rsi, desviacion, precios = [], 
       { nombre: 'RSI', puntos: Math.round(puntosRsi), maximo: 25 },
       { nombre: 'Momentum', puntos: Math.round(puntosMomentum), maximo: 25 },
       { nombre: 'Consistencia', puntos: Math.round(puntosConsistencia), maximo: 20 },
+      { nombre: 'Cuerpo de vela', puntos: Math.round(puntosCuerpo), maximo: 15 },
       { nombre: 'Patrón de vela', puntos: bonificacionPatron, maximo: 20 },
     ],
   };

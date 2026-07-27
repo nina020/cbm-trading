@@ -17,7 +17,7 @@ import {
   clasificarTendencia, detectarRango,
 } from './strategy.js';
 import { puntuarSenal } from './signalScorer.js';
-import { PERIODO_EMA } from '../config.js';
+import { PERIODO_EMA, INTERVALO_VELA, VELAS_PARA_SENAL } from '../config.js';
 
 // Cantidad máxima de mercados monitoreados simultáneamente.
 // Deriv permite muchas conexiones simultáneas pero abrir demasiadas
@@ -52,13 +52,16 @@ export function createLiveScanner({
       mercados.set(id, {
         id,
         nombre: id,
-        precios: [],
-        preciosHistorico: [],
-        preciosEma: [],
+        cierres: [],          // cierres de vela para MA/RSI
+        cierresHistorico: [], // buffer largo para RSI
+        cierresEma: [],       // buffer para EMA de tendencia
+        velas: [],            // velas completas para patrones
+        velaActual: null,
+        tiempoVelaActual: null,
         ws: null,
         ultimaSenal: null,
         ultimaSenalTs: 0,
-        ticks: 0,
+        velasAcumuladas: 0,
         listo: false,
         tendencia: 'lateral',
         enRango: false,
@@ -69,29 +72,44 @@ export function createLiveScanner({
     return mercados.get(id);
   }
 
-  function procesarTick(id, precio) {
+  function procesarTick(id, precio, epoch) {
     const estado = estadoMercado(id);
-    estado.ticks++;
+    const tiempoVela = Math.floor(epoch / INTERVALO_VELA) * INTERVALO_VELA;
 
-    estado.precios.push(precio);
-    estado.preciosHistorico.push(precio);
-    estado.preciosEma.push(precio);
+    // Construir velas igual que en app.js
+    if (estado.tiempoVelaActual === null || tiempoVela > estado.tiempoVelaActual) {
+      if (estado.velaActual !== null) {
+        // Vela cerrada — agregar a buffers
+        const cierre = estado.velaActual.close;
+        estado.cierres.push(cierre);
+        estado.cierresHistorico.push(cierre);
+        estado.cierresEma.push(cierre);
+        estado.velas.push({ ...estado.velaActual });
+        estado.velasAcumuladas++;
+        if (estado.cierres.length > VELAS_PARA_SENAL) estado.cierres.shift();
+        if (estado.cierresHistorico.length > VELAS_PARA_SENAL * 5) estado.cierresHistorico.shift();
+        if (estado.cierresEma.length > PERIODO_EMA * 2) estado.cierresEma.shift();
+        if (estado.velas.length > 10) estado.velas.shift();
+      }
+      estado.velaActual = { time: tiempoVela, open: precio, high: precio, low: precio, close: precio };
+      estado.tiempoVelaActual = tiempoVela;
+    } else {
+      estado.velaActual.high = Math.max(estado.velaActual.high, precio);
+      estado.velaActual.low = Math.min(estado.velaActual.low, precio);
+      estado.velaActual.close = precio;
+    }
 
-    if (estado.precios.length > periodo) estado.precios.shift();
-    if (estado.preciosHistorico.length > periodo * 5) estado.preciosHistorico.shift();
-    if (estado.preciosEma.length > PERIODO_EMA * 2) estado.preciosEma.shift();
-
-    if (estado.precios.length < periodo) {
-      onEstado({ id, listo: false, ticks: estado.ticks, periodo });
+    if (estado.cierres.length < VELAS_PARA_SENAL) {
+      onEstado({ id, listo: false, ticks: estado.velasAcumuladas, periodo: VELAS_PARA_SENAL });
       return;
     }
 
-    const ma = calcularMA(estado.precios);
-    const rsi = calcularRSI(estado.preciosHistorico, periodo);
-    const desv = calcularDesviacion(estado.precios, ma);
-    const { soporte, resistencia } = detectarSoporteResistencia(estado.preciosHistorico);
-    const tendencia = clasificarTendencia(estado.preciosEma, PERIODO_EMA);
-    const { enRango, razon: razonRango } = detectarRango(estado.precios, rsi, soporte, resistencia);
+    const ma = calcularMA(estado.cierres);
+    const rsi = calcularRSI(estado.cierresHistorico, periodo);
+    const desv = calcularDesviacion(estado.cierres, ma);
+    const { soporte, resistencia } = detectarSoporteResistencia(estado.cierresHistorico);
+    const tendencia = clasificarTendencia(estado.cierresEma, PERIODO_EMA);
+    const { enRango, razon: razonRango } = detectarRango(estado.cierres, rsi, soporte, resistencia);
     const senal = evaluarSenal({ precio, ma, rsi, desviacion: desv, soporte, resistencia, tendencia, enRango });
     const calidad = puntuarSenal({
       tipo: senal.tipo,
@@ -99,7 +117,8 @@ export function createLiveScanner({
       ma,
       rsi,
       desviacion: desv,
-      precios: estado.precios,
+      precios: estado.cierres,
+      velas: estado.velas,
     });
 
     estado.listo = true;
@@ -115,8 +134,8 @@ export function createLiveScanner({
       id,
       nombre: estado.nombre,
       listo: true,
-      ticks: estado.ticks,
-      periodo,
+      ticks: estado.velasAcumuladas,
+      periodo: VELAS_PARA_SENAL,
       precio,
       ma,
       rsi,
@@ -184,7 +203,7 @@ export function createLiveScanner({
       ws.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data);
-          if (msg.tick) procesarTick(id, msg.tick.quote);
+          if (msg.tick) procesarTick(id, msg.tick.quote, msg.tick.epoch);
         } catch (_) {}
       };
 

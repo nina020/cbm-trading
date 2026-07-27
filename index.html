@@ -905,6 +905,11 @@ table.history-table tr:last-child td { border-bottom: none; }
         <label>Confirmaciones consecutivas</label>
         <input type="number" id="signal-confirmations" min="1" max="10" step="1">
       </div>
+      <div class="config-group">
+        <label>Ratio riesgo/beneficio (1 : X)</label>
+        <input type="number" id="signal-ratio-recompensa" min="1.5" max="5" step="0.5">
+        <small style="color:var(--text-secondary);font-size:11px">El ebook recomienda mínimo 1:2. Con 1:2 solo necesitas acertar el 34% para ser rentable.</small>
+      </div>
     </div>
     <label class="auto-toggle-label" style="margin-top:16px">
       <input type="checkbox" id="signal-filter-auto">

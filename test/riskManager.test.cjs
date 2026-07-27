@@ -48,9 +48,9 @@ test('los objetivos monetarios son proporcionales a la inversión', async () => 
   const objetivos = montos.map(calcularObjetivosMonetarios);
 
   assert.deepEqual(objetivos.map(objetivo => ({ ...objetivo })), [
-    { inversion: 5, riesgo: 1.25, objetivo: 1.875 },
-    { inversion: 20, riesgo: 5, objetivo: 7.5 },
-    { inversion: 100, riesgo: 25, objetivo: 37.5 },
+    { inversion: 5, riesgo: 1.25, objetivo: 2.5 },
+    { inversion: 20, riesgo: 5, objetivo: 10 },
+    { inversion: 100, riesgo: 25, objetivo: 50 },
   ]);
   assert.equal(objetivos[1].objetivo / objetivos[0].objetivo, 4);
 });
@@ -91,7 +91,7 @@ test('la orden demo usa los mismos objetivos monetarios que la simulación', asy
   });
 
   assert.equal(payload.limit_order.stop_loss, 5);
-  assert.equal(payload.limit_order.take_profit, 7.5);
+  assert.equal(payload.limit_order.take_profit, 10);
 });
 
 test('la orden demo redondea montos a 2 decimales para Deriv', async () => {
@@ -114,7 +114,7 @@ test('la orden demo redondea montos a 2 decimales para Deriv', async () => {
 
   assert.equal(payload.amount, 119.97);
   assert.equal(payload.limit_order.stop_loss, 29.99);
-  assert.equal(payload.limit_order.take_profit, 44.99);
+  assert.equal(payload.limit_order.take_profit, 59.99);
 });
 
 test('la orden usa la moneda de la cuenta y USD solo como respaldo', async () => {

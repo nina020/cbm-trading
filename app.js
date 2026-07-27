@@ -1,6 +1,6 @@
 import {
   INTERVALO_VELA, RATIO_RECOMPENSA, MULTIPLICADOR_DEFAULT,
-  SL_DESVIACIONES, TP_DESVIACIONES, PERIODO_EMA,
+  SL_DESVIACIONES, TP_DESVIACIONES, PERIODO_EMA, VELAS_PARA_SENAL,
   EXECUTION_STORAGE_KEY, SIGNAL_CONFIG_STORAGE_KEY, STRATEGY_CONFIG_STORAGE_KEY,
   GLOBAL_RISK_STORAGE_KEY, ORDER_AUDIT_STORAGE_KEY, NOMBRES_SIMBOLOS, MERCADOS_ESTABLES, TEMAS,
 } from './config.js';
@@ -66,6 +66,7 @@ let positionChartWs = null;
 let positionChartTimer = null;
 let cooldownAutoSeg = 60;
 let signalConfig = { ...SIGNAL_CONFIG_DEFAULTS };
+let ratioRecompensa = 2.0; // configurable por el usuario desde el panel de configuración
 let strategyConfig = { ...STRATEGY_CONFIG_DEFAULTS };
 const estadosAutomaticos = {};
 
@@ -553,6 +554,9 @@ function cargarSignalConfig() {
   try {
     const guardada = JSON.parse(localStorage.getItem(SIGNAL_CONFIG_STORAGE_KEY) || '{}');
     signalConfig = normalizarSignalConfig({ ...SIGNAL_CONFIG_DEFAULTS, ...guardada });
+    if (guardada.ratioRecompensa >= 1.5 && guardada.ratioRecompensa <= 5) {
+      ratioRecompensa = guardada.ratioRecompensa;
+    }
   } catch (error) {
     signalConfig = { ...SIGNAL_CONFIG_DEFAULTS };
     console.error('No se pudo cargar la configuración de señales:', error);
@@ -763,6 +767,7 @@ function actualizarPanelAutomatico(mercadoId, cambios = {}) {
 
 function abrirConfiguracionSenales() {
   document.getElementById('signal-threshold').value = signalConfig.umbralMinimo;
+  document.getElementById('signal-ratio-recompensa').value = ratioRecompensa;
   document.getElementById('signal-confirmations').value = signalConfig.confirmacionesRequeridas;
   document.getElementById('signal-filter-auto').checked = signalConfig.filtrarAutoTrading;
   document.getElementById('basket-demo-enabled').checked = signalConfig.basketDemoEnabled;
@@ -813,7 +818,9 @@ function guardarConfiguracionSenales() {
     maxOperacionesHora: document.getElementById('strategy-max-hour').value,
     maxOperacionesDia: document.getElementById('strategy-max-day').value,
   });
-  localStorage.setItem(SIGNAL_CONFIG_STORAGE_KEY, JSON.stringify(signalConfig));
+  const nuevoRatio = parseFloat(document.getElementById('signal-ratio-recompensa').value);
+  if (nuevoRatio >= 1.5 && nuevoRatio <= 5) ratioRecompensa = nuevoRatio;
+  localStorage.setItem(SIGNAL_CONFIG_STORAGE_KEY, JSON.stringify({ ...signalConfig, ratioRecompensa }));
   localStorage.setItem(STRATEGY_CONFIG_STORAGE_KEY, JSON.stringify(strategyConfig));
   cerrarConfiguracionSenales();
   if (strategyConfig.notificarFueraHorario) solicitarPermisoNotificaciones();
@@ -1839,7 +1846,7 @@ function renderPlan(entrada, sl, tp, tipo, mercadoId, calidad) {
   `;
 }
 
-function actualizarTarjeta(id, precio, ma, rsi, hora, periodo, desv, precios, soporte = null, resistencia = null, tendencia = 'lateral', enRango = false, razonRango = '') {
+function actualizarTarjeta(id, precio, ma, rsi, hora, periodo, desv, precios, soporte = null, resistencia = null, tendencia = 'lateral', enRango = false, razonRango = '', velasPatrones = []) {
   const el = document.getElementById(`card-${id}`);
   if (!el) return 'WAIT';
   el.querySelector('.precio').textContent = precio.toLocaleString();
@@ -1878,6 +1885,7 @@ function actualizarTarjeta(id, precio, ma, rsi, hora, periodo, desv, precios, so
     rsi: rsiNum,
     desviacion: desv,
     precios,
+    velas: velasPatrones,
   });
   if (senal.tipo === 'BUY') {
     tipoSenal = senal.tipo;
@@ -1974,11 +1982,13 @@ async function agregarMercado(mercadoId = null, opciones = {}) {
     const { chart, candleSeries, maSeries } = crearTarjeta(id, nombre, perfil, periodo);
     actualizarPanelAutomatico(id);
     const wsUrl = await obtenerWsUrl();
-    const precios = [];
-    // Historial largo para RSI (5x periodo), soporte/resistencia y EMA de tendencia.
-    const preciosHistorico = [];
-    // Buffer separado para la EMA de tendencia (necesita PERIODO_EMA precios como mínimo).
-    const preciosEma = [];
+    // Usamos CIERRES DE VELA (no ticks crudos) para el análisis.
+    // Con INTERVALO_VELA=15s y VELAS_PARA_SENAL=50 → 12.5 minutos de historia por señal.
+    // Cada punto del MA/RSI representa 15 segundos reales, no un tick individual.
+    const cierresVela = [];           // últimas VELAS_PARA_SENAL velas cerradas
+    const cierresHistorico = [];      // buffer para RSI (5x periodo)
+    const cierresEma = [];            // buffer para EMA de tendencia
+    const velasParaPatrones = [];     // últimas 10 velas completas {open,high,low,close}
     let velaActual = null;
     let tiempoVelaActual = null;
     let ultimaSenal = 'WAIT';
@@ -2014,17 +2024,22 @@ async function agregarMercado(mercadoId = null, opciones = {}) {
         const hora = new Date(epoch * 1000).toLocaleTimeString();
         const tiempoVela = Math.floor(epoch / INTERVALO_VELA) * INTERVALO_VELA;
 
-        precios.push(precio);
-        preciosHistorico.push(precio);
-        if (preciosHistorico.length > periodo * 5) preciosHistorico.shift();
-        preciosEma.push(precio);
-        if (preciosEma.length > PERIODO_EMA * 2) preciosEma.shift();
-
         const el = document.getElementById(`card-${id}`);
-        if (el) el.querySelector('.ticks').textContent =
-          `${Math.min(precios.length, periodo)}/${periodo}`;
 
+        // Construir/actualizar la vela actual con cada tick.
         if (tiempoVelaActual === null || tiempoVela > tiempoVelaActual) {
+          // Vela anterior cerrada — registrarla en los buffers de análisis.
+          if (velaActual !== null) {
+            const cierre = velaActual.close;
+            cierresVela.push(cierre);
+            cierresHistorico.push(cierre);
+            cierresEma.push(cierre);
+            velasParaPatrones.push({ ...velaActual });
+            if (cierresVela.length > VELAS_PARA_SENAL) cierresVela.shift();
+            if (cierresHistorico.length > VELAS_PARA_SENAL * 5) cierresHistorico.shift();
+            if (cierresEma.length > PERIODO_EMA * 2) cierresEma.shift();
+            if (velasParaPatrones.length > 10) velasParaPatrones.shift();
+          }
           velaActual = { time: tiempoVela, open: precio, high: precio, low: precio, close: precio };
           tiempoVelaActual = tiempoVela;
         } else {
@@ -2034,19 +2049,22 @@ async function agregarMercado(mercadoId = null, opciones = {}) {
         }
         candleSeries.update(velaActual);
 
-        if (precios.length < periodo) return;
-        if (precios.length > periodo) precios.shift();
+        if (el) el.querySelector('.ticks').textContent =
+          `${Math.min(cierresVela.length, VELAS_PARA_SENAL)}/${VELAS_PARA_SENAL} velas`;
 
-        const ma = calcularMA(precios);
-        const rsi = calcularRSI(preciosHistorico, periodo);
-        const desv = calcularDesviacion(precios, ma);
-        const { soporte, resistencia } = detectarSoporteResistencia(preciosHistorico);
-        const tendencia = clasificarTendencia(preciosEma, PERIODO_EMA);
-        const { enRango, razon: razonRango } = detectarRango(precios, rsi, soporte, resistencia);
+        if (cierresVela.length < VELAS_PARA_SENAL) return;
+
+        const ma = calcularMA(cierresVela);
+        const rsi = calcularRSI(cierresHistorico, periodo);
+        const desv = calcularDesviacion(cierresVela, ma);
+        const { soporte, resistencia } = detectarSoporteResistencia(cierresHistorico);
+        const tendencia = clasificarTendencia(cierresEma, PERIODO_EMA);
+        const { enRango, razon: razonRango } = detectarRango(cierresVela, rsi, soporte, resistencia);
 
         maSeries.update({ time: tiempoVela, value: ma });
         const resultadoSenal = actualizarTarjeta(
-          id, precio, ma.toFixed(4), rsi, hora, periodo, desv, precios, soporte, resistencia, tendencia, enRango, razonRango,
+          id, precio, ma.toFixed(4), rsi, hora, VELAS_PARA_SENAL, desv, cierresVela,
+          soporte, resistencia, tendencia, enRango, razonRango, velasParaPatrones,
         );
         if (mercadosActivos[id]) {
           Object.assign(mercadosActivos[id], {
