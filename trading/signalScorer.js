@@ -1,6 +1,8 @@
+import { evaluarPatronesVela } from './candlePatterns.js';
+
 export const SIGNAL_CONFIG_DEFAULTS = {
-  umbralMinimo: 70,
-  confirmacionesRequeridas: 3,
+  umbralMinimo: 65,
+  confirmacionesRequeridas: 2,
   filtrarAutoTrading: true,
   basketDemoEnabled: false,
   basketSize: 3,
@@ -16,9 +18,12 @@ function limitar(value, minimo, maximo) {
 
 export function normalizarSignalConfig(config = {}) {
   return {
-    umbralMinimo: limitar(Number(config.umbralMinimo) || 70, 50, 95),
+    umbralMinimo: limitar(
+      Number(config.umbralMinimo) || SIGNAL_CONFIG_DEFAULTS.umbralMinimo,
+      50, 95,
+    ),
     confirmacionesRequeridas: limitar(
-      Math.round(Number(config.confirmacionesRequeridas) || 3),
+      Math.round(Number(config.confirmacionesRequeridas) || SIGNAL_CONFIG_DEFAULTS.confirmacionesRequeridas),
       1,
       10,
     ),
@@ -32,7 +37,7 @@ export function normalizarSignalConfig(config = {}) {
   };
 }
 
-export function puntuarSenal({ tipo, precio, ma, rsi, desviacion, precios = [] }) {
+export function puntuarSenal({ tipo, precio, ma, rsi, desviacion, precios = [], velas = [] }) {
   if (!['BUY', 'SELL'].includes(tipo)) {
     return { puntuacion: 0, nivel: 'sin señal', factores: [] };
   }
@@ -58,19 +63,27 @@ export function puntuarSenal({ tipo, precio, ma, rsi, desviacion, precios = [] }
   const consistencia = cambios.length ? cambiosFavorables / cambios.length : 0;
   const puntosConsistencia = consistencia * 20;
 
-  const puntuacion = Math.round(
-    puntosTendencia + puntosRsi + puntosMomentum + puntosConsistencia,
-  );
+  // Bonificación por patrones de velas japonesas (del ebook de Billy Chacón).
+  // Suma hasta +20 si el patrón confirma la señal, resta hasta -20 si la contradice.
+  const { patronAlcista, patronBajista, bonificacion: bonificacionPatron } =
+    evaluarPatronesVela(velas, tipo);
+
+  const puntuacion = Math.min(100, Math.max(0, Math.round(
+    puntosTendencia + puntosRsi + puntosMomentum + puntosConsistencia + bonificacionPatron,
+  )));
   const nivel = puntuacion >= 80 ? 'fuerte' : puntuacion >= 65 ? 'moderada' : 'débil';
 
   return {
     puntuacion,
     nivel,
+    patronAlcista,
+    patronBajista,
     factores: [
       { nombre: 'Tendencia', puntos: Math.round(puntosTendencia), maximo: 30 },
       { nombre: 'RSI', puntos: Math.round(puntosRsi), maximo: 25 },
       { nombre: 'Momentum', puntos: Math.round(puntosMomentum), maximo: 25 },
       { nombre: 'Consistencia', puntos: Math.round(puntosConsistencia), maximo: 20 },
+      { nombre: 'Patrón de vela', puntos: bonificacionPatron, maximo: 20 },
     ],
   };
 }

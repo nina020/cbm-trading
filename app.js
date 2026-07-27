@@ -18,7 +18,7 @@ import { createAutoTrader } from './trading/autoTrader.js';
 import { createExecutionJournal } from './trading/executionJournal.js';
 import { createOrderAudit } from './trading/orderAudit.js';
 import { ejecutarOrdenDemo, extraerCostosReportados } from './trading/orderService.js';
-import { calcularMA, calcularRSI, calcularDesviacion, evaluarSenal } from './trading/strategy.js';
+import { calcularMA, calcularRSI, calcularDesviacion, evaluarSenal, detectarSoporteResistencia } from './trading/strategy.js';
 import {
   SIGNAL_CONFIG_DEFAULTS, createSignalTrigger, normalizarSignalConfig, puntuarSenal,
 } from './trading/signalScorer.js';
@@ -1778,7 +1778,7 @@ function renderPlan(entrada, sl, tp, tipo, mercadoId, calidad) {
   `;
 }
 
-function actualizarTarjeta(id, precio, ma, rsi, hora, periodo, desv, precios) {
+function actualizarTarjeta(id, precio, ma, rsi, hora, periodo, desv, precios, soporte = null, resistencia = null) {
   const el = document.getElementById(`card-${id}`);
   if (!el) return 'WAIT';
   el.querySelector('.precio').textContent = precio.toLocaleString();
@@ -1792,7 +1792,7 @@ function actualizarTarjeta(id, precio, ma, rsi, hora, periodo, desv, precios) {
   let html = '';
   let tipoSenal = 'WAIT';
 
-  const senal = evaluarSenal({ precio, ma: maNum, rsi: rsiNum, desviacion: desv });
+  const senal = evaluarSenal({ precio, ma: maNum, rsi: rsiNum, desviacion: desv, soporte, resistencia });
   const calidad = puntuarSenal({
     tipo: senal.tipo,
     precio,
@@ -1897,6 +1897,8 @@ async function agregarMercado(mercadoId = null, opciones = {}) {
     actualizarPanelAutomatico(id);
     const wsUrl = await obtenerWsUrl();
     const precios = [];
+    // Historial largo para RSI (5x periodo) y detección de soporte/resistencia.
+    const preciosHistorico = [];
     let velaActual = null;
     let tiempoVelaActual = null;
     let ultimaSenal = 'WAIT';
@@ -1933,6 +1935,8 @@ async function agregarMercado(mercadoId = null, opciones = {}) {
         const tiempoVela = Math.floor(epoch / INTERVALO_VELA) * INTERVALO_VELA;
 
         precios.push(precio);
+        preciosHistorico.push(precio);
+        if (preciosHistorico.length > periodo * 5) preciosHistorico.shift();
 
         const el = document.getElementById(`card-${id}`);
         if (el) el.querySelector('.ticks').textContent =
@@ -1948,17 +1952,17 @@ async function agregarMercado(mercadoId = null, opciones = {}) {
         }
         candleSeries.update(velaActual);
 
-
         if (precios.length < periodo) return;
         if (precios.length > periodo) precios.shift();
 
         const ma = calcularMA(precios);
-        const rsi = calcularRSI(precios);
+        const rsi = calcularRSI(preciosHistorico, periodo);
         const desv = calcularDesviacion(precios, ma);
+        const { soporte, resistencia } = detectarSoporteResistencia(preciosHistorico);
 
         maSeries.update({ time: tiempoVela, value: ma });
         const resultadoSenal = actualizarTarjeta(
-          id, precio, ma.toFixed(4), rsi, hora, periodo, desv, precios,
+          id, precio, ma.toFixed(4), rsi, hora, periodo, desv, precios, soporte, resistencia,
         );
         if (mercadosActivos[id]) {
           Object.assign(mercadosActivos[id], {

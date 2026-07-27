@@ -5,6 +5,8 @@ export const RATIO_RECOMPENSA = 1.5;
 export const SL_DESVIACIONES = 3;
 export const TP_DESVIACIONES = SL_DESVIACIONES * RATIO_RECOMPENSA;
 export const FRACCION_RIESGO_STAKE = 0.25;
+// Distancia mínima al MA (en desviaciones) para que un movimiento sea señal real y no ruido.
+export const FILTRO_RUIDO_DESVIACIONES = 0.5;
 export const MULTIPLICADOR_DEFAULT = 100;
 export const EXECUTION_STORAGE_KEY = 'cbm_ejecuciones_v2';
 export const SIGNAL_CONFIG_STORAGE_KEY = 'cbm_signal_config_v1';

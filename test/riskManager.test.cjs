@@ -356,7 +356,7 @@ test('la configuración de señales aplica límites seguros', async () => {
     filtrarAutoTrading: false,
   }) }, {
     umbralMinimo: 95,
-    confirmacionesRequeridas: 3,
+    confirmacionesRequeridas: 2,
     filtrarAutoTrading: false,
     basketDemoEnabled: false,
     basketSize: 3,
@@ -1185,4 +1185,161 @@ test('la evaluación semanal resume solo operaciones demo recientes', async () =
   assert.equal(evaluacion.mejorMercado.key, 'Vol 10');
   assert.equal(preparacion.listo, false);
   assert.equal(preparacion.checks.find(item => item.id === 'riesgo').ok, true);
+});
+
+// ── RSI (suavizado de Wilder) ─────────────────────────────────────────────────
+
+test('el RSI con historial mínimo usa el respaldo de promedio simple', async () => {
+  const { calcularRSI } = await cargarModulo(path.join(__dirname, '../trading/strategy.js'));
+  assert.equal(calcularRSI([100, 101, 99, 102, 100], 14), '50.00');
+});
+
+test('el RSI aplica el suavizado de Wilder cuando hay suficiente historial', async () => {
+  const { calcularRSI } = await cargarModulo(path.join(__dirname, '../trading/strategy.js'));
+  assert.equal(calcularRSI([10, 12, 11, 13, 12, 14, 13, 15], 3), '76.02');
+});
+
+test('el RSI llega a 100 cuando el historial solo tiene subidas', async () => {
+  const { calcularRSI } = await cargarModulo(path.join(__dirname, '../trading/strategy.js'));
+  const precios = Array.from({ length: 21 }, (_, i) => 10 + i);
+  assert.equal(calcularRSI(precios, 14), '100.00');
+});
+
+test('el RSI es 50 cuando el precio se mantiene sin cambios', async () => {
+  const { calcularRSI } = await cargarModulo(path.join(__dirname, '../trading/strategy.js'));
+  assert.equal(calcularRSI(Array.from({ length: 16 }, () => 50), 14), '50.00');
+});
+
+// ── Filtro de ruido ───────────────────────────────────────────────────────────
+
+test('evaluarSenal ignora movimientos menores al filtro de ruido', async () => {
+  const { evaluarSenal } = await cargarModulo(path.join(__dirname, '../trading/strategy.js'));
+  const resultado = evaluarSenal({ precio: 100.5, ma: 100, rsi: 50, desviacion: 2 });
+  assert.equal(resultado.tipo, 'WAIT');
+});
+
+test('evaluarSenal genera BUY cuando el precio supera el filtro de ruido', async () => {
+  const { evaluarSenal } = await cargarModulo(path.join(__dirname, '../trading/strategy.js'));
+  assert.equal(evaluarSenal({ precio: 102, ma: 100, rsi: 50, desviacion: 2 }).tipo, 'BUY');
+});
+
+test('evaluarSenal genera SELL cuando el precio supera el filtro de ruido', async () => {
+  const { evaluarSenal } = await cargarModulo(path.join(__dirname, '../trading/strategy.js'));
+  assert.equal(evaluarSenal({ precio: 98, ma: 100, rsi: 50, desviacion: 2 }).tipo, 'SELL');
+});
+
+// ── Soporte y Resistencia ─────────────────────────────────────────────────────
+
+test('detectarSoporteResistencia devuelve null con historial insuficiente', async () => {
+  const { detectarSoporteResistencia } = await cargarModulo(path.join(__dirname, '../trading/strategy.js'));
+  const resultado = detectarSoporteResistencia([100, 101, 99]);
+  assert.equal(resultado.soporte, null);
+  assert.equal(resultado.resistencia, null);
+});
+
+test('detectarSoporteResistencia identifica un soporte y una resistencia en historial simple', async () => {
+  const { detectarSoporteResistencia } = await cargarModulo(path.join(__dirname, '../trading/strategy.js'));
+  // Ciclo claro: sube a 110, baja a 90, sube a 108, precio actual en 100
+  const precios = [100,105,110,105,95,90,95,102,108,105,100];
+  const { soporte, resistencia } = detectarSoporteResistencia(precios);
+  assert.ok(soporte !== null, 'debe detectar soporte');
+  assert.ok(resistencia !== null, 'debe detectar resistencia');
+  assert.ok(soporte < 100, 'soporte debe estar por debajo del precio actual');
+  assert.ok(resistencia > 100, 'resistencia debe estar por encima del precio actual');
+});
+
+test('evaluarSenal bloquea BUY cuando el precio está dentro del 1% de la resistencia', async () => {
+  const { evaluarSenal } = await cargarModulo(path.join(__dirname, '../trading/strategy.js'));
+  // Precio en 104.5, resistencia en 105 → diferencia 0.48% < 1% → debe bloquear
+  const resultado = evaluarSenal({
+    precio: 104.5, ma: 100, rsi: 50, desviacion: 2,
+    resistencia: 105,
+  });
+  assert.equal(resultado.tipo, 'WAIT');
+});
+
+test('evaluarSenal bloquea SELL cuando el precio está dentro del 1% de un soporte', async () => {
+  const { evaluarSenal } = await cargarModulo(path.join(__dirname, '../trading/strategy.js'));
+  // Precio en 95.5, soporte en 95 → diferencia 0.53% < 1% → debe bloquear
+  const resultado = evaluarSenal({
+    precio: 95.5, ma: 100, rsi: 50, desviacion: 2,
+    soporte: 95,
+  });
+  assert.equal(resultado.tipo, 'WAIT');
+});
+
+test('evaluarSenal permite BUY cuando la resistencia está lejos', async () => {
+  const { evaluarSenal } = await cargarModulo(path.join(__dirname, '../trading/strategy.js'));
+  const resultado = evaluarSenal({
+    precio: 102, ma: 100, rsi: 50, desviacion: 2,
+    resistencia: 115,
+  });
+  assert.equal(resultado.tipo, 'BUY');
+});
+
+// ── Defaults de señales ───────────────────────────────────────────────────────
+
+test('la configuración de señales usa el umbral y confirmaciones por defecto correctos', async () => {
+  const { normalizarSignalConfig, SIGNAL_CONFIG_DEFAULTS } = await cargarModulo(
+    path.join(__dirname, '../trading/signalScorer.js'),
+  );
+  assert.equal(SIGNAL_CONFIG_DEFAULTS.umbralMinimo, 65);
+  assert.equal(SIGNAL_CONFIG_DEFAULTS.confirmacionesRequeridas, 2);
+  assert.deepEqual(normalizarSignalConfig({}), SIGNAL_CONFIG_DEFAULTS);
+});
+
+// ── Patrones de velas (Módulo 3 del ebook de Billy Chacón) ───────────────────
+
+test('detecta Martillo correctamente', async () => {
+  const { esMartillo } = await cargarModulo(path.join(__dirname, '../trading/candlePatterns.js'));
+  // Cuerpo pequeño arriba, mecha inferior larga
+  assert.equal(esMartillo({ open: 100, close: 101, high: 101.5, low: 96 }), true);
+  assert.equal(esMartillo({ open: 100, close: 105, high: 106, low: 99 }), false);
+});
+
+test('detecta Envolvente alcista correctamente', async () => {
+  const { esEnvolventeAlcista } = await cargarModulo(path.join(__dirname, '../trading/candlePatterns.js'));
+  const velas = [
+    { open: 105, close: 100, high: 106, low: 99 },  // bajista
+    { open: 99,  close: 106, high: 107, low: 98 },  // alcista que envuelve
+  ];
+  assert.equal(esEnvolventeAlcista(velas), true);
+});
+
+test('detecta Envolvente bajista correctamente', async () => {
+  const { esEnvolventeBajista } = await cargarModulo(path.join(__dirname, '../trading/candlePatterns.js'));
+  const velas = [
+    { open: 100, close: 105, high: 106, low: 99 },  // alcista
+    { open: 106, close: 99,  high: 107, low: 98 },  // bajista que envuelve
+  ];
+  assert.equal(esEnvolventeBajista(velas), true);
+});
+
+test('detecta Doji correctamente', async () => {
+  const { esDoji } = await cargarModulo(path.join(__dirname, '../trading/candlePatterns.js'));
+  assert.equal(esDoji({ open: 100, close: 100.05, high: 102, low: 98 }), true);
+  assert.equal(esDoji({ open: 100, close: 105, high: 106, low: 99 }), false);
+});
+
+test('evaluarPatronesVela sube la puntuación cuando el patrón confirma la señal', async () => {
+  const { evaluarPatronesVela } = await cargarModulo(path.join(__dirname, '../trading/candlePatterns.js'));
+  // Envolvente alcista + señal BUY → bonificación positiva
+  const velas = [
+    { open: 105, close: 100, high: 106, low: 99 },
+    { open: 99,  close: 106, high: 107, low: 98 },
+  ];
+  const resultado = evaluarPatronesVela(velas, 'BUY');
+  assert.ok(resultado.bonificacion > 0, 'debe dar bonificación positiva');
+  assert.ok(resultado.patronAlcista !== null, 'debe detectar patrón alcista');
+});
+
+test('evaluarPatronesVela baja la puntuación cuando el patrón contradice la señal', async () => {
+  const { evaluarPatronesVela } = await cargarModulo(path.join(__dirname, '../trading/candlePatterns.js'));
+  // Envolvente bajista + señal BUY → bonificación negativa
+  const velas = [
+    { open: 100, close: 105, high: 106, low: 99 },
+    { open: 106, close: 99,  high: 107, low: 98 },
+  ];
+  const resultado = evaluarPatronesVela(velas, 'BUY');
+  assert.ok(resultado.bonificacion < 0, 'debe dar bonificación negativa');
 });
