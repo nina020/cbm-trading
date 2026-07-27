@@ -104,6 +104,17 @@ body { background: var(--bg-page); color: var(--text-primary); transition: backg
 .alert-item-error { border-color: var(--danger); }
 .alert-item-warning { border-color: var(--warning); }
 .alert-item-info { border-color: var(--blue); }
+.scanner-row { display:flex; align-items:center; gap:8px; font-size:11px; padding:4px 6px; border-radius:4px; background:var(--bg-card); }
+.scanner-row.scanner-signal { background:var(--bg-stat); border-left:3px solid var(--accent); }
+.scanner-nombre { font-weight:500; color:var(--text-primary); min-width:72px; }
+.scanner-tendencia { font-size:10px; min-width:64px; }
+.scanner-tipo { margin-left:auto; font-weight:500; }
+.scanner-calidad { font-size:10px; color:var(--text-secondary); }
+.scanner-rango { font-size:10px; color:#f59e0b; }
+.scanner-empty { font-size:11px; color:var(--text-faint); padding:4px; }
+.scanner-loading { opacity:.7; }
+.scanner-progress { flex:1; height:3px; background:var(--border); border-radius:2px; overflow:hidden; }
+.scanner-progress div { height:100%; background:var(--accent); transition:width .3s; }
 
 .config-row { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; padding-top: 2px; }
 .config-group { display: flex; flex-direction: column; gap: 4px; }
@@ -664,6 +675,15 @@ table.history-table tr:last-child td { border-bottom: none; }
         <div class="alert-panel-title">Alertas recientes</div>
         <div class="alert-list" id="alert-list">
           <div class="alert-item alert-item-info">La app está lista para monitorear eventos importantes.</div>
+        </div>
+      </div>
+      <div class="alert-panel" style="margin-top:10px">
+        <div class="alert-panel-title" style="display:flex;justify-content:space-between;align-items:center">
+          <span>🔍 Escáner en vivo</span>
+          <small style="color:var(--text-secondary);font-weight:400">Monitoreo automático en segundo plano</small>
+        </div>
+        <div id="live-scanner-panel" style="display:flex;flex-direction:column;gap:4px;max-height:160px;overflow-y:auto;margin-top:4px">
+          <div class="alert-item alert-item-info">Iniciando escáner...</div>
         </div>
       </div>
     </div>

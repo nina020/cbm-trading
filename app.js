@@ -37,6 +37,7 @@ import { renderAutoStatus } from './components/autoStatus.js';
 import { renderMarketRanking } from './components/marketRanking.js';
 import { createPositionChart } from './components/positionChart.js';
 import { ordenarMercadosParaInicio } from './trading/marketRanking.js';
+import { createLiveScanner } from './trading/liveScanner.js';
 import { escanearMercadosEstables } from './trading/marketScanner.js';
 import { evaluarCandidatoCanasta, seleccionarMercadosCanasta } from './trading/basketTrader.js';
 
@@ -67,6 +68,33 @@ let cooldownAutoSeg = 60;
 let signalConfig = { ...SIGNAL_CONFIG_DEFAULTS };
 let strategyConfig = { ...STRATEGY_CONFIG_DEFAULTS };
 const estadosAutomaticos = {};
+
+// Escáner en vivo — monitorea los mejores mercados en segundo plano
+// y emite alertas cuando detecta señales válidas sin que el usuario
+// tenga que abrir cada mercado manualmente.
+const liveScanner = createLiveScanner({
+  obtenerWsUrl,
+  periodo: 14,
+  umbralCalidad: 65,
+  onSenal: (senal) => {
+    const icono = senal.tipo === 'BUY' ? '🟢' : '🔴';
+    const dir   = senal.tipo === 'BUY' ? 'COMPRA' : 'VENTA';
+    const patron = senal.patronAlcista || senal.patronBajista
+      ? ` · ${senal.patronAlcista || senal.patronBajista}` : '';
+    emitirAlerta(
+      `${icono} ${dir} en ${senal.nombre} — calidad ${senal.calidad}/100 (${senal.nivel})${patron}`,
+      senal.tipo === 'BUY' ? 'success' : 'error',
+      { notificacion: true },
+    );
+    renderPanelScanner();
+    // Si el mercado no está abierto, agregar automáticamente para que el
+    // usuario pueda operar con un solo clic.
+    if (!mercadosActivos[senal.id]) {
+      agregarMercado(senal.id, { silencioso: true }).catch(() => {});
+    }
+  },
+  onEstado: () => renderPanelScanner(),
+});
 const notificacionesOportunidad = {};
 let oportunidadFueraHorario = null;
 let filtroEjecuciones = 'todos';
@@ -320,6 +348,39 @@ function emitirAlerta(mensaje, tipo = 'info', { notificacion = false } = {}) {
   if (notificacion && 'Notification' in window && Notification.permission === 'granted') {
     new Notification('CBM Trading', { body: mensaje });
   }
+}
+
+function renderPanelScanner() {
+  const contenedor = document.getElementById('live-scanner-panel');
+  if (!contenedor) return;
+
+  const estados = liveScanner.obtenerEstados();
+  if (!estados.length) {
+    contenedor.innerHTML = '<div class="scanner-empty">Escáner iniciando...</div>';
+    return;
+  }
+
+  contenedor.innerHTML = estados.map(e => {
+    if (!e.listo) {
+      const pct = Math.round((e.ticks / 14) * 100);
+      return `<div class="scanner-row scanner-loading">
+        <span class="scanner-nombre">${escapeHtml(e.nombre)}</span>
+        <span class="scanner-estado">Acumulando ticks ${e.ticks}/14</span>
+        <div class="scanner-progress"><div style="width:${pct}%"></div></div>
+      </div>`;
+    }
+    const icono = e.tipo === 'BUY' ? '🟢' : e.tipo === 'SELL' ? '🔴' : '⚪';
+    const tendColor = e.tendencia === 'alcista' ? '#22c55e' : e.tendencia === 'bajista' ? '#ef4444' : '#94a3b8';
+    const tendIcono = e.tendencia === 'alcista' ? '▲' : e.tendencia === 'bajista' ? '▼' : '→';
+    const rangoTag = e.enRango ? '<span class="scanner-rango">⊡ rango</span>' : '';
+    return `<div class="scanner-row ${e.tipo === 'WAIT' ? '' : 'scanner-signal'}">
+      <span class="scanner-nombre">${escapeHtml(e.nombre)}</span>
+      <span class="scanner-tendencia" style="color:${tendColor}">${tendIcono} ${e.tendencia}</span>
+      ${rangoTag}
+      <span class="scanner-tipo">${icono} ${e.tipo === 'WAIT' ? 'Esperando' : e.tipo}</span>
+      ${e.tipo !== 'WAIT' ? `<span class="scanner-calidad">${e.calidad}/100</span>` : ''}
+    </div>`;
+  }).join('');
 }
 
 function renderAuditoriaOrdenes(eventos = []) {
@@ -2295,6 +2356,21 @@ async function iniciarApp() {
   cargarPortfolio();
   actualizarRankingAutomatico();
   setInterval(actualizarRankingAutomatico, MARKET_RANKING_REFRESH_MS);
+
+  // Arrancar el escáner en vivo con los mejores mercados estables.
+  // Se espera un poco para que el ranking inicial esté disponible.
+  setTimeout(async () => {
+    const mejores = MERCADOS_ESTABLES.slice(0, 6).map(m => ({ id: m.id, nombre: m.nombre }));
+    await liveScanner.iniciar(mejores);
+    renderPanelScanner();
+    // Cuando el ranking se actualice, actualizar también qué mercados monitorea el escáner.
+    setInterval(() => {
+      const rankeados = mercadosEscaneados
+        .slice(0, 6)
+        .map(m => ({ id: m.id, nombre: m.nombre }));
+      if (rankeados.length) liveScanner.actualizarLista(rankeados);
+    }, MARKET_RANKING_REFRESH_MS);
+  }, 3000);
 }
 
 iniciarApp().catch(error => {
