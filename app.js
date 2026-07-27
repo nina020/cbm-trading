@@ -18,7 +18,7 @@ import { createAutoTrader } from './trading/autoTrader.js';
 import { createExecutionJournal } from './trading/executionJournal.js';
 import { createOrderAudit } from './trading/orderAudit.js';
 import { ejecutarOrdenDemo, extraerCostosReportados } from './trading/orderService.js';
-import { calcularMA, calcularRSI, calcularDesviacion, calcularEMA, evaluarSenal, detectarSoporteResistencia, clasificarTendencia } from './trading/strategy.js';
+import { calcularMA, calcularRSI, calcularDesviacion, calcularEMA, evaluarSenal, detectarSoporteResistencia, clasificarTendencia, detectarRango } from './trading/strategy.js';
 import {
   SIGNAL_CONFIG_DEFAULTS, createSignalTrigger, normalizarSignalConfig, puntuarSenal,
 } from './trading/signalScorer.js';
@@ -1778,7 +1778,7 @@ function renderPlan(entrada, sl, tp, tipo, mercadoId, calidad) {
   `;
 }
 
-function actualizarTarjeta(id, precio, ma, rsi, hora, periodo, desv, precios, soporte = null, resistencia = null, tendencia = 'lateral') {
+function actualizarTarjeta(id, precio, ma, rsi, hora, periodo, desv, precios, soporte = null, resistencia = null, tendencia = 'lateral', enRango = false, razonRango = '') {
   const el = document.getElementById(`card-${id}`);
   if (!el) return 'WAIT';
   el.querySelector('.precio').textContent = precio.toLocaleString();
@@ -1791,9 +1791,17 @@ function actualizarTarjeta(id, precio, ma, rsi, hora, periodo, desv, precios, so
   const tendenciaEl = el.querySelector('.tendencia');
   if (tendenciaEl) {
     const icono = tendencia === 'alcista' ? '▲' : tendencia === 'bajista' ? '▼' : '→';
-    const color = tendencia === 'alcista' ? '#22c55e' : tendencia === 'bajista' ? '#ef4444' : '#94a3b8';
-    tendenciaEl.textContent = `${icono} ${tendencia}`;
+    const color = enRango
+      ? '#f59e0b'
+      : tendencia === 'alcista' ? '#22c55e' : tendencia === 'bajista' ? '#ef4444' : '#94a3b8';
+    const texto = enRango
+      ? `⊡ rango${razonRango ? ` · ${razonRango}` : ''}`
+      : `${icono} ${tendencia}`;
+    tendenciaEl.textContent = texto;
     tendenciaEl.style.color = color;
+    tendenciaEl.title = enRango
+      ? `Mercado en consolidación (${razonRango}) — señales desactivadas`
+      : `Tendencia: ${tendencia}`;
   }
 
   const maNum = parseFloat(ma);
@@ -1801,7 +1809,7 @@ function actualizarTarjeta(id, precio, ma, rsi, hora, periodo, desv, precios, so
   let html = '';
   let tipoSenal = 'WAIT';
 
-  const senal = evaluarSenal({ precio, ma: maNum, rsi: rsiNum, desviacion: desv, soporte, resistencia, tendencia });
+  const senal = evaluarSenal({ precio, ma: maNum, rsi: rsiNum, desviacion: desv, soporte, resistencia, tendencia, enRango });
   const calidad = puntuarSenal({
     tipo: senal.tipo,
     precio,
@@ -1973,10 +1981,11 @@ async function agregarMercado(mercadoId = null, opciones = {}) {
         const desv = calcularDesviacion(precios, ma);
         const { soporte, resistencia } = detectarSoporteResistencia(preciosHistorico);
         const tendencia = clasificarTendencia(preciosEma, PERIODO_EMA);
+        const { enRango, razon: razonRango } = detectarRango(precios, rsi, soporte, resistencia);
 
         maSeries.update({ time: tiempoVela, value: ma });
         const resultadoSenal = actualizarTarjeta(
-          id, precio, ma.toFixed(4), rsi, hora, periodo, desv, precios, soporte, resistencia, tendencia,
+          id, precio, ma.toFixed(4), rsi, hora, periodo, desv, precios, soporte, resistencia, tendencia, enRango, razonRango,
         );
         if (mercadosActivos[id]) {
           Object.assign(mercadosActivos[id], {

@@ -162,18 +162,81 @@ export function clasificarTendencia(precios, periodoEma = PERIODO_EMA) {
   return 'lateral';
 }
 
+/**
+ * Detecta si el mercado está en un rango (consolidación lateral).
+ *
+ * El ebook (Módulo 5, tema 61 "¿Cuándo NO operar?") dice explícitamente:
+ * "En consolidación — el precio rebota entre un soporte y una resistencia
+ * sin tendencia clara. Las señales de MA pierden validez aquí."
+ *
+ * Un mercado está en rango cuando:
+ * 1. La amplitud del precio reciente (max - min) es pequeña relativa al precio.
+ * 2. Tanto soporte como resistencia están detectados y están cerca entre sí.
+ * 3. El RSI ronda el 50 sin tendencia clara (ni sobrecompra ni sobreventa).
+ *
+ * @param {number[]} precios   - historial reciente de precios
+ * @param {number}   rsi       - RSI actual (número)
+ * @param {number|null} soporte
+ * @param {number|null} resistencia
+ * @param {number}   umbralRango - amplitud máxima como % del precio para
+ *                                 considerar que es rango (por defecto 0.5%)
+ * @returns {{ enRango: boolean, amplitud: number, razon: string }}
+ */
+export function detectarRango(precios, rsi, soporte, resistencia, umbralRango = 0.005) {
+  if (precios.length < 10) return { enRango: false, amplitud: 0, razon: 'historial insuficiente' };
+
+  const precio = precios[precios.length - 1];
+  const maxReciente = Math.max(...precios);
+  const minReciente = Math.min(...precios);
+  const amplitud = (maxReciente - minReciente) / precio;
+
+  // Condición 1: precio encerrado en una banda estrecha.
+  const bandaEstrecha = amplitud < umbralRango;
+
+  // Condición 2: ambos niveles S/R detectados y el precio cabe entre ellos
+  // con poco espacio libre (el rango S/R es pequeño relativo al precio).
+  const rsiNumero = Number(rsi);
+  const srCercanos = soporte !== null && resistencia !== null
+    && (resistencia - soporte) / precio < umbralRango * 3;
+
+  // Condición 3: RSI neutro (entre 40 y 60) sin impulso claro.
+  const rsiNeutro = rsiNumero >= 40 && rsiNumero <= 60;
+
+  // Se considera rango cuando al menos 2 de las 3 condiciones se cumplen.
+  const condicionesCumplidas = [bandaEstrecha, srCercanos, rsiNeutro]
+    .filter(Boolean).length;
+  const enRango = condicionesCumplidas >= 2;
+
+  const razon = enRango
+    ? [
+        bandaEstrecha ? `amplitud ${(amplitud * 100).toFixed(2)}%` : null,
+        srCercanos ? 'S/R cercanos' : null,
+        rsiNeutro ? `RSI neutro (${rsiNumero.toFixed(0)})` : null,
+      ].filter(Boolean).join(', ')
+    : '';
+
+  return { enRango, amplitud, razon };
+}
+
 export function evaluarSenal({
   precio, ma, rsi, desviacion,
   filtroRuido = FILTRO_RUIDO_DESVIACIONES,
   soporte = null,
   resistencia = null,
   tendencia = 'lateral',
+  enRango = false,
 }) {
   const desv = Number(desviacion) || 0;
   const distancia = Math.abs(Number(precio) - Number(ma));
 
   // Filtro 1: ignorar movimientos menores al mínimo de ruido.
   if (distancia < desv * filtroRuido) {
+    return { tipo: 'WAIT', sl: null, tp: null };
+  }
+
+  // Filtro de rango: el ebook dice explícitamente no operar en consolidación
+  // (Módulo 5, tema 61). Las señales de MA pierden validez en mercado lateral.
+  if (enRango) {
     return { tipo: 'WAIT', sl: null, tp: null };
   }
 

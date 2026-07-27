@@ -1,6 +1,6 @@
 import {
   calcularMA, calcularRSI, calcularDesviacion, calcularEMA,
-  evaluarSenal, detectarSoporteResistencia, clasificarTendencia,
+  evaluarSenal, detectarSoporteResistencia, clasificarTendencia, detectarRango,
 } from './strategy.js';
 import { puntuarSenal } from './signalScorer.js';
 import { PERIODO_EMA } from '../config.js';
@@ -22,7 +22,8 @@ export function analizarMercadoHistorico({ mercado, ticks, periodo = 14 }) {
   const desviacion = calcularDesviacion(precios, media);
   const { soporte, resistencia } = detectarSoporteResistencia(preciosDisponibles);
   const tendencia = clasificarTendencia(preciosDisponibles, PERIODO_EMA);
-  const senal = evaluarSenal({ precio, ma: media, rsi, desviacion, soporte, resistencia, tendencia });
+  const { enRango } = detectarRango(precios, rsi, soporte, resistencia);
+  const senal = evaluarSenal({ precio, ma: media, rsi, desviacion, soporte, resistencia, tendencia, enRango });
   const calidad = puntuarSenal({
     tipo: senal.tipo,
     precio,
@@ -39,6 +40,7 @@ export function analizarMercadoHistorico({ mercado, ticks, periodo = 14 }) {
     calidad: calidad.puntuacion,
     tipoSenal: senal.tipo,
     tendencia,
+    enRango,
   };
 }
 

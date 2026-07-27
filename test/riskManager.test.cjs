@@ -1442,3 +1442,37 @@ test('evaluarPatronesVela detecta Martillo con caída previa', async () => {
   assert.equal(resultado.patronAlcista, 'Martillo');
   assert.ok(resultado.bonificacion > 0);
 });
+
+// ── Detección de mercado lateral / en rango ────────────────────────────────────
+
+test('detectarRango identifica mercado en rango por banda estrecha y RSI neutro', async () => {
+  const { detectarRango } = await cargarModulo(path.join(__dirname, '../trading/strategy.js'));
+  // Precio oscilando en banda muy estrecha (< 0.5%) con RSI neutro
+  const precios = Array.from({ length: 20 }, (_, i) => 100 + (i % 2 === 0 ? 0.1 : -0.1));
+  const resultado = detectarRango(precios, 50, 99.8, 100.2);
+  assert.equal(resultado.enRango, true, 'debe detectar rango por banda estrecha y RSI neutro');
+});
+
+test('detectarRango no marca rango en mercado con tendencia clara', async () => {
+  const { detectarRango } = await cargarModulo(path.join(__dirname, '../trading/strategy.js'));
+  // Precio subiendo sostenidamente, RSI alto
+  const precios = Array.from({ length: 20 }, (_, i) => 100 + i * 0.5);
+  const resultado = detectarRango(precios, 72, null, null);
+  assert.equal(resultado.enRango, false, 'no debe marcar rango en tendencia clara');
+});
+
+test('evaluarSenal devuelve WAIT cuando el mercado está en rango', async () => {
+  const { evaluarSenal } = await cargarModulo(path.join(__dirname, '../trading/strategy.js'));
+  const resultado = evaluarSenal({
+    precio: 102, ma: 100, rsi: 50, desviacion: 2,
+    tendencia: 'alcista', enRango: true,
+  });
+  assert.equal(resultado.tipo, 'WAIT', 'debe bloquear señal en mercado en rango');
+});
+
+test('detectarRango devuelve historial insuficiente con pocos datos', async () => {
+  const { detectarRango } = await cargarModulo(path.join(__dirname, '../trading/strategy.js'));
+  const resultado = detectarRango([100, 101, 99], 50, null, null);
+  assert.equal(resultado.enRango, false);
+  assert.equal(resultado.razon, 'historial insuficiente');
+});
