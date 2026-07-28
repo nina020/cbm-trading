@@ -28,6 +28,8 @@ export function createExecutionJournal({ storageKey, onChange, storage = localSt
       multiplicador = null, precioCotizado = null, costosReportados = null,
       stopLossAmount = null, takeProfitAmount = null,
       tipoEjecucion = null,
+      // Cambio #17: datos de contexto de análisis para aprendizaje posterior.
+      patron = null, confirmaciones = null, tendencia = null, calidad = null,
     }) {
       const existente = registros.find(item => String(item.id) === String(id));
       if (existente) return existente;
@@ -52,6 +54,11 @@ export function createExecutionJournal({ storageKey, onChange, storage = localSt
         pnl: null,
         abiertaEn: new Date().toISOString(),
         cerradaEn: null,
+        // Cambio #17: contexto de análisis al momento de la ejecución.
+        patron,
+        confirmaciones,
+        tendencia,
+        calidad,
       };
       registros.unshift(registro);
       guardar();

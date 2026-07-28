@@ -1,4 +1,5 @@
 import { evaluarPatronesVela } from './candlePatterns.js';
+import { detectarPatronGeometrico } from './chartPatterns.js';
 
 export const SIGNAL_CONFIG_DEFAULTS = {
   umbralMinimo: 65,
@@ -86,6 +87,14 @@ export function puntuarSenal({ tipo, precio, ma, rsi, desviacion, precios = [], 
   const { patronAlcista, patronBajista, bonificacion: bonificacionPatron } =
     evaluarPatronesVela(velas, tipo);
 
+  // Cambio #12: bonificación por patrón geométrico (triángulo simétrico o flag).
+  // Billy Chacón (Módulo 4): patrones de chart suman contexto y confirman la dirección.
+  const patronGeometrico = detectarPatronGeometrico(velas);
+  const bonificacionGeometrica = patronGeometrico.nombre
+    && patronGeometrico.direccion === tipo
+    ? patronGeometrico.bonificacion
+    : 0;
+
   // Confluencia: cuántos factores superan un umbral mínimo individualmente.
   // El ebook (Módulo 5, checklist) exige mínimo 4 confirmaciones antes de entrar.
   // Aquí medimos cuántos de los 4 factores principales superan el 50% de su máximo.
@@ -98,7 +107,7 @@ export function puntuarSenal({ tipo, precio, ma, rsi, desviacion, precios = [], 
 
   const puntuacion = Math.min(100, Math.max(0, Math.round(
     puntosTendencia + puntosRsi + puntosMomentum + puntosConsistencia
-    + puntosCuerpo + bonificacionPatron,
+    + puntosCuerpo + bonificacionPatron + bonificacionGeometrica,
   )));
 
   // La señal necesita al menos 2 factores activos para considerarse válida.
@@ -119,6 +128,8 @@ export function puntuarSenal({ tipo, precio, ma, rsi, desviacion, precios = [], 
     confluencia: factoresActivos,
     patronAlcista,
     patronBajista,
+    patronGeometrico: patronGeometrico.nombre || null,
+    patronGeometricoDireccion: patronGeometrico.direccion,
     factores: [
       { nombre: 'Tendencia', puntos: Math.round(puntosTendencia), maximo: 30 },
       { nombre: 'RSI', puntos: Math.round(puntosRsi), maximo: 25 },
@@ -126,6 +137,7 @@ export function puntuarSenal({ tipo, precio, ma, rsi, desviacion, precios = [], 
       { nombre: 'Consistencia', puntos: Math.round(puntosConsistencia), maximo: 20 },
       { nombre: 'Cuerpo de vela', puntos: Math.round(puntosCuerpo), maximo: 15 },
       { nombre: 'Patrón de vela', puntos: bonificacionPatron, maximo: 20 },
+      ...(patronGeometrico.nombre ? [{ nombre: patronGeometrico.nombre, puntos: bonificacionGeometrica, maximo: 15 }] : []),
     ],
   };
 }

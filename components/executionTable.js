@@ -45,6 +45,15 @@ export function renderExecutionTable({ registros, tbody, empty, summary }) {
     const pnlBruto = item.pnlBruto ?? (item.costos === 0 ? pnlNeto : null);
     const color = pnlNeto === null || pnlNeto === undefined ? 'var(--text-faint)'
       : pnlNeto >= 0 ? '#26a69a' : '#ef5350';
+    // Cambio #17: columnas de contexto de análisis (patrón, confirmaciones, tendencia, calidad).
+    const patronTexto = item.patron || '—';
+    const confirmacionesTexto = item.confirmaciones !== null && item.confirmaciones !== undefined
+      ? `${item.confirmaciones}/4` : '—';
+    const tendenciaTexto = item.tendencia || '—';
+    const calidadTexto = item.calidad !== null && item.calidad !== undefined
+      ? `${item.calidad}/100` : '—';
+    const tendColor = item.tendencia === 'alcista' ? '#22c55e'
+      : item.tendencia === 'bajista' ? '#ef4444' : 'var(--text-faint)';
     return `
       <tr>
         <td>${hora(item.abiertaEn)}</td>
@@ -58,6 +67,10 @@ export function renderExecutionTable({ registros, tbody, empty, summary }) {
         <td>${dinero(pnlBruto, true)}</td>
         <td>${dinero(item.costos)}</td>
         <td style="color:${color};font-weight:600">${dinero(pnlNeto, true)}</td>
+        <td style="font-size:10px" title="Patrón de vela al ejecutar">${patronTexto}</td>
+        <td style="font-size:10px;text-align:center" title="Confirmaciones Billy Chacón (0-4)">${confirmacionesTexto}</td>
+        <td style="font-size:10px;color:${tendColor}" title="Tendencia al ejecutar">${tendenciaTexto}</td>
+        <td style="font-size:10px;text-align:center" title="Calidad de señal al ejecutar">${calidadTexto}</td>
       </tr>
     `;
   }).join('');

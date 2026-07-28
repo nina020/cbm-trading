@@ -582,6 +582,47 @@ function actualizarRiesgoPorcentaje(value) {
   renderRangoRiesgoRecomendado();
 }
 
+/**
+ * Cambio #14 — Selector de temporalidad.
+ * Reagrupa los ticks crudos acumulados en el nuevo intervalo y redibuja el gráfico.
+ * Billy Chacón (Módulo 2): usar timeframe mayor para la tendencia, menor para la entrada.
+ */
+function cambiarTemporalidad(id, segundos) {
+  const mercado = mercadosActivos[id];
+  if (!mercado) return;
+  mercado.tfActual = segundos;
+
+  // Actualizar estilo de botones del selector.
+  [15, 60, 300, 900].forEach(tf => {
+    const btn = document.getElementById(`tf-btn-${id}-${tf}`);
+    if (!btn) return;
+    const activo = tf === segundos;
+    btn.style.background = activo ? 'var(--accent)' : 'var(--bg-stat)';
+    btn.style.color = activo ? '#fff' : 'var(--text-secondary)';
+    btn.style.fontWeight = activo ? '700' : '400';
+  });
+
+  // Reagrupar ticks en velas de la nueva temporalidad.
+  if (!mercado.ticksRaw || mercado.ticksRaw.length < 2) return;
+  const velasAgrupadas = new Map();
+  for (const tick of mercado.ticksRaw) {
+    const t = Math.floor(tick.epoch / segundos) * segundos;
+    if (!velasAgrupadas.has(t)) {
+      velasAgrupadas.set(t, { time: t, open: tick.precio, high: tick.precio, low: tick.precio, close: tick.precio });
+    } else {
+      const v = velasAgrupadas.get(t);
+      v.high = Math.max(v.high, tick.precio);
+      v.low = Math.min(v.low, tick.precio);
+      v.close = tick.precio;
+    }
+  }
+
+  // Redibujar el candleSeries con las velas reagrupadas.
+  const velas = Array.from(velasAgrupadas.values()).sort((a, b) => a.time - b.time);
+  if (velas.length < 2) return;
+  mercado.candleSeries.setData(velas);
+}
+
 function actualizarMontoFijo(value) {
   riskManager.setMontoFijo(value);
 }
@@ -1685,6 +1726,8 @@ async function ejecutarOperacion(mercadoId, tipo, entrada, sl, tp, btnId) {
         costosReportados: cotizacion.costosReportados,
         stopLossAmount: objetivos.riesgo,
         takeProfitAmount: objetivos.objetivo,
+        // Cambio #17: contexto de análisis al momento de la ejecución.
+        ...(mercadosActivos[mercadoId]?.ultimoContexto || {}),
       });
       emitirAlerta(
         `${nombre} ${tipo} ejecutado en ${etiquetaModoOperacion()} · contrato ${compra.contract_id}.`,
@@ -1778,6 +1821,8 @@ async function ejecutarOperacionAutomaticaCore(mercadoId, tipo, entrada, sl, tp,
         costosReportados: cotizacion.costosReportados,
         stopLossAmount: objetivos.riesgo,
         takeProfitAmount: objetivos.objetivo,
+        // Cambio #17: contexto de análisis al momento de la ejecución.
+        ...(mercadosActivos[mercadoId]?.ultimoContexto || {}),
       });
       const etiquetaTipo = opciones.tipoEjecucion === 'canasta_3x' ? 'Canasta 3x demo' : 'Automático';
       registrarLogAuto(`✅ ${etiquetaTipo}: ${nombre} ${tipo} ejecutado — contrato ${compra.contract_id} | $${stake.toFixed(2)} | x${multiplicador} | saldo: $${compra.balance_after}`, 'success');
@@ -1910,6 +1955,11 @@ function renderPlan(entrada, sl, tp, tipo, mercadoId, calidad) {
       </div>` : ''}
       ${calidad.patronAlcista ? `<div style="margin-top:4px;font-size:10px;color:#16a06a">▲ ${calidad.patronAlcista}</div>` : ''}
       ${calidad.patronBajista ? `<div style="margin-top:4px;font-size:10px;color:#e0483d">▼ ${calidad.patronBajista}</div>` : ''}
+      ${calidad.patronGeometrico ? (() => {
+        const confirma = calidad.patronGeometricoDireccion === tipo;
+        const colorGeo = confirma ? '#a855f7' : '#94a3b8';
+        return `<div style="margin-top:4px;font-size:10px;color:${colorGeo};font-weight:600">◈ ${calidad.patronGeometrico}${confirma ? ' — confirma dirección' : ''}</div>`;
+      })() : ''}
     </div>
     <button id="${btnId}" class="${btnClass}" onclick="ejecutarOperacion('${mercadoId}', '${tipo}', ${entrada}, ${sl}, ${tp}, '${btnId}')">${accionTexto}</button>
   `;
@@ -2018,6 +2068,37 @@ function actualizarTarjeta(id, precio, ma, rsi, hora, periodo, desv, precios, so
     } else {
       checklistEl.style.display = 'none';
     }
+  }
+
+  // Cambio #13: chip del patrón de vela detectado (nombre + si confirma o contradice la señal).
+  // candlePatterns.js ya detecta 10 patrones; calidad.patronAlcista/patronBajista los expone.
+  const tipoTentativoChip = senal.tipo !== 'WAIT' ? senal.tipo : (breakoutRetest && breakoutRetest.tipo ? breakoutRetest.tipo : null);
+  if (calidad.patronAlcista || calidad.patronBajista) {
+    const patron = calidad.patronAlcista || calidad.patronBajista;
+    const esAlcista = !!calidad.patronAlcista;
+    // Confirma si el patrón está en la misma dirección que la señal tentativa.
+    const confirma = tipoTentativoChip === 'BUY' ? esAlcista : tipoTentativoChip === 'SELL' ? !esAlcista : null;
+    const chipColor = confirma === true ? '#22c55e' : confirma === false ? '#ef4444' : '#94a3b8';
+    const chipBg = confirma === true ? 'rgba(34,197,94,0.10)' : confirma === false ? 'rgba(239,68,68,0.10)' : 'var(--bg-stat)';
+    const chipIcono = esAlcista ? '▲' : '▼';
+    const confirmaTxt = confirma === true ? ' · confirma señal' : confirma === false ? ' · contradice señal' : '';
+    // Tooltip con descripción básica del patrón.
+    const tooltips = {
+      'martillo': 'Mecha inferior larga — rechazo de ventas en soporte',
+      'martillo invertido': 'Mecha superior larga — prueba de compradores',
+      'estrella fugaz': 'Mecha superior larga — rechazo en resistencia',
+      'envolvente alcista': 'Vela alcista que envuelve la anterior — impulso comprador',
+      'envolvente bajista': 'Vela bajista que envuelve la anterior — impulso vendedor',
+      'pin bar alcista': 'Mecha larga con cierre alto — presión compradora',
+      'pin bar bajista': 'Mecha larga con cierre bajo — presión vendedora',
+      'marubozu alcista': 'Sin mechas — dominio total de compradores',
+      'marubozu bajista': 'Sin mechas — dominio total de vendedores',
+      'doji': 'Indecisión del mercado — posible reversión',
+    };
+    const tooltip = tooltips[patron.toLowerCase()] || patron;
+    html += `<div style="margin-bottom:4px;padding:4px 8px;background:${chipBg};border:1px solid ${chipColor};border-radius:5px;font-size:10px;font-weight:600;color:${chipColor};cursor:help" title="${tooltip}">
+      ${chipIcono} ${patron}${confirmaTxt} <span style="font-size:9px;opacity:.7">(?) ver descripción</span>
+    </div>`;
   }
 
   // Alerta visual de vela explosiva (Cambio #4)
@@ -2171,6 +2252,8 @@ async function agregarMercado(mercadoId = null, opciones = {}) {
     const cierresHistorico = [];      // buffer para RSI (5x periodo)
     const cierresEma = [];            // buffer para EMA de tendencia
     const velasParaPatrones = [];     // últimas 10 velas completas {open,high,low,close}
+    // Cambio #14: buffer de ticks crudos para reagrupar en cualquier temporalidad.
+    const ticksRaw = [];              // { epoch, precio } — hasta 15 minutos de historia
     let velaActual = null;
     let tiempoVelaActual = null;
     let ultimaSenal = 'WAIT';
@@ -2205,6 +2288,10 @@ async function agregarMercado(mercadoId = null, opciones = {}) {
         const epoch = msg.tick.epoch;
         const hora = new Date(epoch * 1000).toLocaleTimeString();
         const tiempoVela = Math.floor(epoch / INTERVALO_VELA) * INTERVALO_VELA;
+
+        // Cambio #14: guardar tick crudo para poder reagrupar en otras temporalidades.
+        ticksRaw.push({ epoch, precio });
+        if (ticksRaw.length > 6000) ticksRaw.shift(); // ~15 min de ticks a ~1/s
 
         const el = document.getElementById(`card-${id}`);
 
@@ -2364,6 +2451,13 @@ async function agregarMercado(mercadoId = null, opciones = {}) {
             precio,
             desviacion: desv,
             calidad: resultadoSenal.calidad.puntuacion,
+            // Cambio #17: guardar contexto de análisis para el historial de órdenes.
+            ultimoContexto: {
+              patron: resultadoSenal.calidad.patronAlcista || resultadoSenal.calidad.patronBajista || null,
+              confirmaciones: confirmaciones ? confirmaciones.total : null,
+              tendencia,
+              calidad: resultadoSenal.calidad.puntuacion,
+            },
           });
           renderRankingMercados();
         }
@@ -2530,10 +2624,13 @@ async function agregarMercado(mercadoId = null, opciones = {}) {
       perfil,
       periodo,
       chart,
+      candleSeries,
       precio: null,
       desviacion: null,
       calidad: 0,
-      srLines,   // referencias a las price lines de S/R para poder reemplazarlas en cada tick
+      srLines,
+      ticksRaw,           // referencia al buffer de ticks crudos (Cambio #14)
+      tfActual: INTERVALO_VELA,  // temporalidad activa actualmente
     };
     renderRankingMercados();
     return true;

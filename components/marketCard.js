@@ -27,6 +27,14 @@ export function createMarketCard({ id, nombre, perfil, periodo, chartTheme }) {
         <button class="btn-remove" onclick="quitarMercado('${id}')">✕</button>
       </div>
     </div>
+    <!-- Cambio #14: selector de temporalidad — análisis multi-timeframe (Billy Chacón, Módulo 2) -->
+    <div style="display:flex;gap:4px;margin-bottom:4px;flex-wrap:wrap" id="tf-selector-${id}">
+      ${[{v:15,l:'15s'},{v:60,l:'1m'},{v:300,l:'5m'},{v:900,l:'15m'}].map(tf =>
+        `<button onclick="cambiarTemporalidad('${id}',${tf.v})" id="tf-btn-${id}-${tf.v}"
+          style="font-size:10px;padding:2px 8px;border-radius:4px;border:1px solid var(--border);background:${tf.v===15?'var(--accent)':'var(--bg-stat)'};color:${tf.v===15?'#fff':'var(--text-secondary)'};cursor:pointer;font-weight:${tf.v===15?'700':'400'}">${tf.l}</button>`
+      ).join('')}
+      <span style="font-size:9px;color:var(--text-faint);align-self:center;margin-left:2px">timeframe</span>
+    </div>
     <div class="chart-container" id="chart-${id}"></div>
     <div class="stats">
       <div class="stat"><div class="stat-label">Precio</div><div class="stat-value precio">—</div></div>
