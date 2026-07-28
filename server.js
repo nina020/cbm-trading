@@ -37,6 +37,54 @@ const SESSION_COOKIE = 'cbm_session';
 const STATE_COOKIE = 'cbm_ms_state';
 const NONCE_COOKIE = 'cbm_ms_nonce';
 
+// ── Seguridad: headers HTTP ──────────────────────────────────────────────────
+const CSP = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline'",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "font-src https://fonts.gstatic.com",
+  "connect-src 'self' wss://*.derivws.com",
+  "img-src 'self' data:",
+  "frame-ancestors 'none'",
+].join('; ');
+
+function aplicarHeadersSeguridad(res) {
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  res.setHeader('Content-Security-Policy', CSP);
+  if (process.env.NODE_ENV === 'production') {
+    res.setHeader('Strict-Transport-Security', 'max-age=63072000; includeSubDomains; preload');
+  }
+}
+
+// ── Seguridad: rate limiting en memoria (60 req/min por IP) ─────────────────
+const rateLimitStore = new Map();
+const RATE_LIMIT_VENTANA_MS = 60_000;
+const RATE_LIMIT_MAX = 60;
+
+// Limpiar IPs antiguas cada 5 minutos para evitar crecimiento indefinido.
+setInterval(() => {
+  const ahora = Date.now();
+  for (const [ip, entrada] of rateLimitStore.entries()) {
+    if (ahora - entrada.inicio > RATE_LIMIT_VENTANA_MS * 2) rateLimitStore.delete(ip);
+  }
+}, 5 * 60_000);
+
+function superaRateLimit(req) {
+  const ip = req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket.remoteAddress || 'unknown';
+  const ahora = Date.now();
+  const entrada = rateLimitStore.get(ip) || { count: 0, inicio: ahora };
+  if (ahora - entrada.inicio > RATE_LIMIT_VENTANA_MS) {
+    rateLimitStore.set(ip, { count: 1, inicio: ahora });
+    return false;
+  }
+  entrada.count++;
+  rateLimitStore.set(ip, entrada);
+  return entrada.count > RATE_LIMIT_MAX;
+}
+
 async function readJson(req) {
   const chunks = [];
   for await (const chunk of req) chunks.push(chunk);
@@ -51,10 +99,10 @@ async function readJson(req) {
 }
 
 function sendJson(res, status, body) {
+  aplicarHeadersSeguridad(res);
   res.writeHead(status, {
     'Content-Type': 'application/json; charset=utf-8',
     'Cache-Control': 'no-store',
-    'X-Content-Type-Options': 'nosniff',
   });
   res.end(JSON.stringify(body));
 }
@@ -69,7 +117,7 @@ function parseCookies(req) {
 
 function cookieOptions({ maxAge = 3600, httpOnly = true } = {}) {
   const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
-  return `Path=/; Max-Age=${maxAge}; SameSite=Lax${secure}${httpOnly ? '; HttpOnly' : ''}`;
+  return `Path=/; Max-Age=${maxAge}; SameSite=Strict${secure}${httpOnly ? '; HttpOnly' : ''}`;
 }
 
 function setCookie(res, name, value, options = {}) {
@@ -574,17 +622,20 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.url?.startsWith('/api/')) {
+      if (superaRateLimit(req)) {
+        sendJson(res, 429, { error: 'Demasiadas solicitudes. Intenta en un momento.' });
+        return;
+      }
       await handleApi(req, res);
       return;
     }
 
     if (req.method === 'GET' && (req.url === '/' || req.url === '/index.html')) {
       const html = await fs.readFile(INDEX_PATH);
+      aplicarHeadersSeguridad(res);
       res.writeHead(200, {
         'Content-Type': 'text/html; charset=utf-8',
         'Cache-Control': 'no-store',
-        'X-Content-Type-Options': 'nosniff',
-        'Referrer-Policy': 'no-referrer',
       });
       res.end(html);
       return;
@@ -592,10 +643,10 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'GET' && req.url === '/vendor/lightweight-charts.js') {
       const script = await fs.readFile(CHARTS_PATH);
+      aplicarHeadersSeguridad(res);
       res.writeHead(200, {
         'Content-Type': 'text/javascript; charset=utf-8',
         'Cache-Control': 'public, max-age=86400',
-        'X-Content-Type-Options': 'nosniff',
       });
       res.end(script);
       return;
@@ -612,10 +663,10 @@ const server = http.createServer(async (req, res) => {
       if (allowed && !relativePath.includes('..')) {
         const scriptPath = path.join(__dirname, relativePath);
         const script = await fs.readFile(scriptPath);
+        aplicarHeadersSeguridad(res);
         res.writeHead(200, {
           'Content-Type': 'text/javascript; charset=utf-8',
           'Cache-Control': 'no-store',
-          'X-Content-Type-Options': 'nosniff',
         });
         res.end(script);
         return;

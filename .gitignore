@@ -4,3 +4,9 @@ original-snapshot/
 .DS_Store
 npm-debug.log*
 .data/
+# Scripts de prueba locales — no deben publicarse (contienen datos de cuenta)
+auth.js
+simbolos.js
+buy_test.js
+sell_test.js
+proposal_test.js

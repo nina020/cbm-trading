@@ -13,7 +13,7 @@ function getPool() {
   if (!pool) {
     pool = new Pool({
       connectionString: DATABASE_URL,
-      ssl: DATABASE_URL.includes('localhost') ? false : { rejectUnauthorized: false },
+      ssl: DATABASE_URL.includes('localhost') ? false : { rejectUnauthorized: true },
     });
   }
   return pool;
