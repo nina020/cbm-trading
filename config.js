@@ -5,10 +5,8 @@ export const INTERVALO_VELA = 15;
 
 // Número de VELAS (no ticks) que se usan para el MA y el RSI.
 // Con INTERVALO_VELA = 15s y VELAS_PARA_SENAL = 14:
-//   → cada señal resume 14 × 15s = 3.5 minutos de mercado
-// Con VELAS_PARA_SENAL = 50:
-//   → 50 × 15s = 12.5 minutos de mercado (recomendado para tendencia)
-export const VELAS_PARA_SENAL = 50;
+//   → cada señal resume 14 × 15s = 3.5 minutos de mercado (RSI estándar)
+export const VELAS_PARA_SENAL = 14;
 export const RATIO_RECOMPENSA = 2.0;
 // Distancias de salida en desviaciones estándar de la ventana de ticks.
 // TP debe ser SL * RATIO_RECOMPENSA para conservar el ratio riesgo/recompensa.
