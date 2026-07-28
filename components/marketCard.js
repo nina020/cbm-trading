@@ -88,6 +88,7 @@ export function createMarketCard({ id, nombre, perfil, periodo, chartTheme }) {
     height: container.clientHeight || 200,
   }));
   // srLines almacena las price lines de S/R activas para poder quitarlas al actualizar.
-  const srLines = { soporte: null, resistencia: null };
+  // exSoporte/exResistencia = zonas de role reversal (color morado).
+  const srLines = { soporte: null, resistencia: null, exSoporte: null, exResistencia: null };
   return { chart, candleSeries, maSeries, emaSeries, srLines };
 }

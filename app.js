@@ -12,13 +12,13 @@ import {
   solicitarContratoEstado, cerrarContrato,
 } from './services/websocketService.js';
 import {
-  createRiskManager, calcularObjetivosMonetarios,
+  createRiskManager, calcularObjetivosMonetarios, rangoRiesgoRecomendado,
 } from './trading/riskManager.js';
 import { createAutoTrader } from './trading/autoTrader.js';
 import { createExecutionJournal } from './trading/executionJournal.js';
 import { createOrderAudit } from './trading/orderAudit.js';
 import { ejecutarOrdenDemo, extraerCostosReportados } from './trading/orderService.js';
-import { calcularMA, calcularRSI, calcularDesviacion, calcularEMA, evaluarSenal, detectarSoporteResistencia, clasificarTendencia, detectarRango, detectarVelaExplosiva, detectarBreakoutRetest, evaluarConfirmaciones } from './trading/strategy.js';
+import { calcularMA, calcularRSI, calcularDesviacion, calcularEMA, evaluarSenal, detectarSoporteResistencia, clasificarTendencia, detectarRango, detectarVelaExplosiva, detectarBreakoutRetest, evaluarConfirmaciones, detectarRoleReversal } from './trading/strategy.js';
 import {
   SIGNAL_CONFIG_DEFAULTS, createSignalTrigger, normalizarSignalConfig, puntuarSenal,
 } from './trading/signalScorer.js';
@@ -416,8 +416,28 @@ function renderEstadoRiesgoGlobal() {
   const limitePosiciones = estado.config.maxPosicionesAbiertas > 0
     ? `${estado.posicionesAbiertas}/${estado.config.maxPosicionesAbiertas}`
     : `${estado.posicionesAbiertas}/sin límite`;
+
+  // Cambio #11: barra de progreso visual de pérdida diaria.
+  // Cambio #16 (integrado): si el saldo es conocido, mostrar también el límite recomendado del 10%.
+  const limite = estado.config.perdidaMaximaDiaria;
+  const perdida = estado.perdidaDiaria;
+  const pct = limite > 0 ? Math.min(100, (perdida / limite) * 100) : 0;
+  const barColor = pct >= 80 ? '#ef4444' : pct >= 50 ? '#f59e0b' : '#22c55e';
+  const limiteAuto = saldoReal > 0 ? (saldoReal * 0.10).toFixed(2) : null;
+  const limiteSuperado = perdida >= limite;
+
   contenedor.innerHTML = `
-    <div class="summary-stat"><div class="summary-stat-label">Pérdida del día</div><div class="summary-stat-value">$${estado.perdidaDiaria.toFixed(2)}</div></div>
+    ${limiteSuperado ? `<div style="padding:6px 10px;background:rgba(239,68,68,0.12);border:1px solid #ef4444;border-radius:6px;color:#ef4444;font-weight:700;font-size:11px;text-align:center;margin-bottom:6px">🚫 LÍMITE DIARIO ALCANZADO — No operar hasta mañana</div>` : ''}
+    <div style="margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;font-size:10px;margin-bottom:3px">
+        <span style="color:var(--text-faint)">Pérdida del día</span>
+        <span style="font-weight:700;color:${barColor}">$${perdida.toFixed(2)} / $${limite.toFixed(2)} (${pct.toFixed(0)}%)</span>
+      </div>
+      <div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden">
+        <div style="height:100%;width:${pct}%;background:${barColor};border-radius:3px;transition:width .3s"></div>
+      </div>
+      ${limiteAuto ? `<div style="font-size:9px;color:var(--text-faint);margin-top:2px">Límite recomendado Billy Chacón (10% del saldo): $${limiteAuto}</div>` : ''}
+    </div>
     <div class="summary-stat"><div class="summary-stat-label">Posiciones abiertas</div><div class="summary-stat-value">${limitePosiciones}</div></div>
     <div class="summary-stat"><div class="summary-stat-label">Pérdidas seguidas</div><div class="summary-stat-value">${estado.perdidasConsecutivas}/${estado.config.maxPerdidasConsecutivas}</div></div>
     <div class="summary-stat"><div class="summary-stat-label">Operativa</div><div class="summary-stat-value" style="font-size:13px">${pausa}</div></div>
@@ -532,14 +552,34 @@ function alternarPanelEstado() {
   boton.textContent = mostrar ? 'Ocultar estado' : 'Mostrar estado';
 }
 
+// Cambio #6: mostrar rango recomendado por Billy Chacón según el saldo actual.
+function renderRangoRiesgoRecomendado() {
+  const el = document.getElementById('riesgo-recomendado');
+  if (!el) return;
+  const rango = rangoRiesgoRecomendado(saldoReal);
+  if (!rango) { el.style.display = 'none'; return; }
+  el.style.display = '';
+  const porcentaje = riskManager.modo === 'porcentaje'
+    ? Number(document.getElementById('risk-input').value) || 0
+    : null;
+  const fueraDeRango = porcentaje !== null && (porcentaje < rango.min || porcentaje > rango.max);
+  el.innerHTML = `
+    <span style="color:var(--text-faint);font-size:10px">
+      Recomendado: <b style="color:${fueraDeRango ? '#ef4444' : '#22c55e'}">${rango.texto}</b>
+      ${fueraDeRango ? '<span style="color:#ef4444"> ⚠ Fuera del rango sugerido</span>' : ''}
+    </span>`;
+}
+
 function cambiarModoInversion(modo) {
   riskManager.setModo(modo);
   document.getElementById('risk-input').disabled = modo !== 'porcentaje';
   document.getElementById('fixed-input').disabled = modo !== 'fijo';
+  renderRangoRiesgoRecomendado();
 }
 
 function actualizarRiesgoPorcentaje(value) {
   riskManager.setPorcentaje(value);
+  renderRangoRiesgoRecomendado();
 }
 
 function actualizarMontoFijo(value) {
@@ -1134,6 +1174,7 @@ async function actualizarSaldo() {
       saldoReal = parseFloat(data.balance);
       riskManager.setSaldo(saldoReal);
       if (saldosInicialesPorCuenta[cuentaActual] === null) saldosInicialesPorCuenta[cuentaActual] = saldoReal;
+      renderRangoRiesgoRecomendado();
       const balance = saldoReal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
       el.textContent = `$${balance} ${data.currency}`;
       actualizarStatsBalance();
@@ -1839,6 +1880,18 @@ function renderPlan(entrada, sl, tp, tipo, mercadoId, calidad) {
       <span class="trade-plan-extra-value">$${inversion.toFixed(2)}</span>
     </div>
     <div class="trade-plan-ratio">Riesgo máximo: $${riesgoMonetario.toFixed(2)} · Objetivo: $${objetivoMonetario.toFixed(2)} · Relación 1 : ${RATIO_RECOMPENSA}</div>
+    <!-- Cambio #8: calculadora de riesgo en $ y % del saldo real (Billy Chacón, Módulo 5) -->
+    ${saldoReal > 0 ? (() => {
+      const pctRiesgo = ((riesgoMonetario / saldoReal) * 100).toFixed(2);
+      const pctObjetivo = ((objetivoMonetario / saldoReal) * 100).toFixed(2);
+      const ratioReal = riesgoMonetario > 0 ? (objetivoMonetario / riesgoMonetario).toFixed(1) : '—';
+      const rrBajo = parseFloat(ratioReal) < RATIO_RECOMPENSA;
+      return `<div style="font-size:10px;padding:5px 8px;border-radius:5px;background:var(--bg-stat);margin-top:4px;display:flex;flex-direction:column;gap:2px">
+        <div style="display:flex;justify-content:space-between"><span style="color:var(--text-faint)">Riesgo real</span><span style="color:#ef4444;font-weight:600">$${riesgoMonetario.toFixed(2)} (${pctRiesgo}% del saldo)</span></div>
+        <div style="display:flex;justify-content:space-between"><span style="color:var(--text-faint)">Objetivo real</span><span style="color:#22c55e;font-weight:600">$${objetivoMonetario.toFixed(2)} (${pctObjetivo}% del saldo)</span></div>
+        ${rrBajo ? `<div style="color:#ef4444;font-weight:700;margin-top:2px">⚠ R:R ${ratioReal}:1 — por debajo del mínimo 1:${RATIO_RECOMPENSA} recomendado</div>` : `<div style="color:#22c55e;font-size:9px">R:R ${ratioReal}:1 ✓</div>`}
+      </div>`;
+    })() : ''}
     <div class="signal-quality signal-quality-${calidad.nivel}">
       <div style="display:flex;justify-content:space-between;align-items:center">
         <span><b>${calidad.puntuacion}/100</b> · ${calidad.nivel}</span>
@@ -1988,14 +2041,44 @@ function actualizarTarjeta(id, precio, ma, rsi, hora, periodo, desv, precios, so
     const { sl, tp } = senal;
     html += '<div class="signal signal-sell">▼ SELL</div>' + renderPlan(precio, sl, tp, 'SELL', id, calidad);
   } else {
-    const motivoEspera = explosiva
-      ? `⚡ Vela explosiva — esperando normalización (×${velaExplosivaDatos ? velaExplosivaDatos.factor.toFixed(1) : '?'})`
-      : enRango
-        ? `⊡ Rango detectado — señales desactivadas${razonRango ? ': ' + razonRango : ''}`
-        : tendencia === 'lateral'
-          ? '→ Mercado sin tendencia clara — esperando dirección'
-          : senal.razon || '— Esperando condiciones de entrada';
-    html += `<div class="signal signal-wait">${motivoEspera}</div>`;
+    // Cambio #10: Alerta "No operar" con razón específica — las 5 causas de Billy Chacón.
+    const razones = [];
+    // Causa 1: límite de pérdida diaria
+    const estadoRiesgoGlobal = globalRiskManager.estado(obtenerRegistrosParaRiesgo());
+    if (estadoRiesgoGlobal.perdidaDiaria >= estadoRiesgoGlobal.config.perdidaMaximaDiaria) {
+      razones.push({ icono: '🚫', texto: 'Límite de pérdida diaria alcanzado', color: '#ef4444' });
+    }
+    // Causa 2: vela explosiva (FOMO)
+    if (explosiva) {
+      razones.push({ icono: '⚡', texto: `Vela explosiva ×${velaExplosivaDatos ? velaExplosivaDatos.factor.toFixed(1) : '?'} — esperar normalización`, color: '#f59e0b' });
+    }
+    // Causa 3: mercado en consolidación / rango
+    if (enRango) {
+      razones.push({ icono: '⊡', texto: `Mercado en consolidación${razonRango ? ': ' + razonRango : ''}`, color: '#f59e0b' });
+    }
+    // Causa 4: sin tendencia clara (lateral)
+    if (tendencia === 'lateral' && !enRango) {
+      razones.push({ icono: '→', texto: 'Sin tendencia clara — EMA 200 no es filtro válido', color: '#94a3b8' });
+    }
+    // Causa 5: señal en dirección contraria a la tendencia
+    if (senal.razon && senal.razon.includes('tendencia')) {
+      razones.push({ icono: '↩', texto: senal.razon, color: '#ef4444' });
+    }
+    // Confirmaciones insuficientes
+    if (confirmaciones && !confirmaciones.completo && !razones.length) {
+      razones.push({ icono: '☐', texto: `Solo ${confirmaciones.total}/4 confirmaciones — entrada no válida`, color: '#f59e0b' });
+    }
+    // Fallback genérico
+    if (!razones.length) {
+      razones.push({ icono: '⏳', texto: senal.razon || 'Esperando condiciones de entrada', color: 'var(--text-secondary)' });
+    }
+    html += `<div class="signal signal-wait" style="display:flex;flex-direction:column;gap:4px;background:transparent;border:none;padding:0">
+      <div style="font-size:10px;font-weight:700;color:var(--text-faint);text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px">No operar:</div>
+      ${razones.map(r => `<div style="display:flex;align-items:center;gap:5px;padding:4px 8px;border-radius:5px;background:var(--bg-stat);border:1px solid var(--border)">
+        <span style="font-size:13px">${r.icono}</span>
+        <span style="font-size:11px;font-weight:500;color:${r.color}">${r.texto}</span>
+      </div>`).join('')}
+    </div>`;
   }
   el.querySelector('.signal-container').innerHTML = html;
 
@@ -2174,6 +2257,38 @@ async function agregarMercado(mercadoId = null, opciones = {}) {
           if (elCard) {
             const emaEl = elCard.querySelector('.ema200');
             if (emaEl) emaEl.textContent = ema200.toLocaleString(undefined, { maximumFractionDigits: 4 });
+            // Cambio #9: añadir "SOBRE EMA" / "BAJO EMA" al badge de tendencia prominente.
+            // Billy Chacón (Módulo 2): precio > EMA 200 = buscar compras; precio < EMA 200 = buscar ventas.
+            const badge = elCard.querySelector(`#tendencia-badge-${id}`);
+            if (badge) {
+              const sobreEma = precio > ema200;
+              const emaLabel = sobreEma ? '↑ SOBRE EMA 200' : '↓ BAJO EMA 200';
+              const emaColor = sobreEma ? '#22c55e' : '#ef4444';
+              // El badge ya tiene el texto de tendencia — le añadimos el estado EMA como segunda línea.
+              badge.style.display = 'flex';
+              badge.style.flexDirection = 'column';
+              badge.style.alignItems = 'flex-start';
+              badge.style.lineHeight = '1.3';
+              // Preservar el texto de tendencia ya renderizado y agregar subtítulo EMA.
+              const tendenciaSpan = badge.querySelector('.badge-tendencia') || (() => {
+                const s = document.createElement('span');
+                s.className = 'badge-tendencia';
+                badge.innerHTML = '';
+                badge.appendChild(s);
+                return s;
+              })();
+              const emaSpan = badge.querySelector('.badge-ema') || (() => {
+                const s = document.createElement('span');
+                s.className = 'badge-ema';
+                s.style.fontSize = '9px';
+                s.style.opacity = '.85';
+                badge.appendChild(s);
+                return s;
+              })();
+              // El texto de tendencia lo gestiona actualizarTarjeta; aquí solo actualizamos el subtítulo EMA.
+              emaSpan.textContent = emaLabel;
+              emaSpan.style.color = emaColor;
+            }
           }
         }
 
@@ -2206,6 +2321,35 @@ async function agregarMercado(mercadoId = null, opciones = {}) {
               lineStyle: 2,
               axisLabelVisible: true,
               title: `R${zonaResistencia ? ' ×' + zonaResistencia.rechazos : ''}`,
+            });
+          }
+
+          // Cambio #7: role reversal — zonas S/R que cambiaron de rol tras ruptura (líneas moradas).
+          const roleReversal = detectarRoleReversal(cierresHistorico, soporte, resistencia, desv);
+          if (mercadoRef.srLines.exSoporte) {
+            try { candleSeries.removePriceLine(mercadoRef.srLines.exSoporte); } catch (_) {}
+          }
+          if (mercadoRef.srLines.exResistencia) {
+            try { candleSeries.removePriceLine(mercadoRef.srLines.exResistencia); } catch (_) {}
+          }
+          if (roleReversal.exSoporte !== null) {
+            mercadoRef.srLines.exSoporte = candleSeries.createPriceLine({
+              price: roleReversal.exSoporte,
+              color: '#a855f7',
+              lineWidth: 1,
+              lineStyle: 2,
+              axisLabelVisible: true,
+              title: 'Ex-S→R',
+            });
+          }
+          if (roleReversal.exResistencia !== null) {
+            mercadoRef.srLines.exResistencia = candleSeries.createPriceLine({
+              price: roleReversal.exResistencia,
+              color: '#a855f7',
+              lineWidth: 1,
+              lineStyle: 2,
+              axisLabelVisible: true,
+              title: 'Ex-R→S',
             });
           }
         }

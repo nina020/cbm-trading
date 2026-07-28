@@ -146,6 +146,45 @@ export function detectarSoporteResistencia(precios, margen = 0.002) {
 }
 
 /**
+ * Cambio #7 — Role reversal de zonas S/R.
+ * Billy Chacón (Módulo 2): cuando un soporte es roto de forma confirmada
+ * (precio cierra 1 desviación por debajo), ese nivel pasa a ser resistencia,
+ * y viceversa. Es una de las señales más potentes del método.
+ *
+ * @param {number[]} precios - Cierres recientes
+ * @param {number|null} soporte - Soporte actual
+ * @param {number|null} resistencia - Resistencia actual
+ * @param {number} desviacion - Desviación estándar (como umbral de ruptura confirmada)
+ * @returns {{ exSoporte: number|null, exResistencia: number|null }}
+ *   exSoporte: nivel de soporte roto → ahora es resistencia
+ *   exResistencia: nivel de resistencia rota → ahora es soporte
+ */
+export function detectarRoleReversal(precios, soporte, resistencia, desviacion = 0) {
+  if (precios.length < 5) return { exSoporte: null, exResistencia: null };
+  const umbral = desviacion > 0 ? desviacion : 0;
+  const ventana = precios.slice(-10);
+  const minVentana = Math.min(...ventana);
+  const maxVentana = Math.max(...ventana);
+  const precioActual = precios[precios.length - 1];
+
+  // Ex-soporte → nueva resistencia: el precio cerró por debajo del soporte
+  // en algún punto reciente y ahora está por debajo de él.
+  let exSoporte = null;
+  if (soporte !== null && precioActual < soporte - umbral && minVentana < soporte - umbral) {
+    exSoporte = soporte;
+  }
+
+  // Ex-resistencia → nuevo soporte: el precio cerró por encima de la resistencia
+  // y ahora está por encima de ella.
+  let exResistencia = null;
+  if (resistencia !== null && precioActual > resistencia + umbral && maxVentana > resistencia + umbral) {
+    exResistencia = resistencia;
+  }
+
+  return { exSoporte, exResistencia };
+}
+
+/**
  * Detecta si la última vela es explosiva (anti-FOMO).
  * Billy Chacón (Módulo 5): "No entres después de una vela muy grande.
  * El precio necesita consolidar antes de continuar."
