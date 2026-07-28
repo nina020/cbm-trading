@@ -18,7 +18,7 @@ import { createAutoTrader } from './trading/autoTrader.js';
 import { createExecutionJournal } from './trading/executionJournal.js';
 import { createOrderAudit } from './trading/orderAudit.js';
 import { ejecutarOrdenDemo, extraerCostosReportados } from './trading/orderService.js';
-import { calcularMA, calcularRSI, calcularDesviacion, calcularEMA, evaluarSenal, detectarSoporteResistencia, clasificarTendencia, detectarRango } from './trading/strategy.js';
+import { calcularMA, calcularRSI, calcularDesviacion, calcularEMA, evaluarSenal, detectarSoporteResistencia, clasificarTendencia, detectarRango, detectarVelaExplosiva, detectarBreakoutRetest, evaluarConfirmaciones } from './trading/strategy.js';
 import {
   SIGNAL_CONFIG_DEFAULTS, createSignalTrigger, normalizarSignalConfig, puntuarSenal,
 } from './trading/signalScorer.js';
@@ -1862,7 +1862,7 @@ function renderPlan(entrada, sl, tp, tipo, mercadoId, calidad) {
   `;
 }
 
-function actualizarTarjeta(id, precio, ma, rsi, hora, periodo, desv, precios, soporte = null, resistencia = null, tendencia = 'lateral', enRango = false, razonRango = '', velasPatrones = []) {
+function actualizarTarjeta(id, precio, ma, rsi, hora, periodo, desv, precios, soporte = null, resistencia = null, tendencia = 'lateral', enRango = false, razonRango = '', velasPatrones = [], velaExplosivaDatos = null, breakoutRetest = null) {
   const el = document.getElementById(`card-${id}`);
   if (!el) return 'WAIT';
   el.querySelector('.precio').textContent = precio.toLocaleString();
@@ -1888,12 +1888,40 @@ function actualizarTarjeta(id, precio, ma, rsi, hora, periodo, desv, precios, so
       : `Tendencia: ${tendencia}`;
   }
 
+  // Cambio #9 (visual): badge de tendencia prominente en el header
+  const tendenciaBadge = document.getElementById(`tendencia-badge-${id}`);
+  if (tendenciaBadge) {
+    if (enRango) {
+      tendenciaBadge.textContent = '⊡ consolidación';
+      tendenciaBadge.style.background = 'rgba(245,158,11,0.15)';
+      tendenciaBadge.style.color = '#f59e0b';
+      tendenciaBadge.style.borderColor = '#f59e0b';
+    } else if (tendencia === 'alcista') {
+      tendenciaBadge.textContent = '▲ alcista';
+      tendenciaBadge.style.background = 'rgba(34,197,94,0.15)';
+      tendenciaBadge.style.color = '#22c55e';
+      tendenciaBadge.style.borderColor = '#22c55e';
+    } else if (tendencia === 'bajista') {
+      tendenciaBadge.textContent = '▼ bajista';
+      tendenciaBadge.style.background = 'rgba(239,68,68,0.15)';
+      tendenciaBadge.style.color = '#ef4444';
+      tendenciaBadge.style.borderColor = '#ef4444';
+    } else {
+      tendenciaBadge.textContent = '→ lateral';
+      tendenciaBadge.style.background = '';
+      tendenciaBadge.style.color = 'var(--text-secondary)';
+      tendenciaBadge.style.borderColor = 'var(--border)';
+    }
+  }
+
   const maNum = parseFloat(ma);
   const rsiNum = parseFloat(rsi);
   let html = '';
   let tipoSenal = 'WAIT';
 
-  const senal = evaluarSenal({ precio, ma: maNum, rsi: rsiNum, desviacion: desv, soporte, resistencia, tendencia, enRango });
+  // Cambio #4: pasar velaExplosiva a evaluarSenal para activar el filtro anti-FOMO
+  const explosiva = velaExplosivaDatos ? velaExplosivaDatos.explosiva : false;
+  const senal = evaluarSenal({ precio, ma: maNum, rsi: rsiNum, desviacion: desv, soporte, resistencia, tendencia, enRango, velaExplosiva: explosiva });
   const calidad = puntuarSenal({
     tipo: senal.tipo,
     precio,
@@ -1903,21 +1931,71 @@ function actualizarTarjeta(id, precio, ma, rsi, hora, periodo, desv, precios, so
     precios,
     velas: velasPatrones,
   });
+
+  // Cambio #3: calcular y mostrar el checklist de las 4 confirmaciones Billy Chacón
+  const tipoTentativo = senal.tipo !== 'WAIT' ? senal.tipo : (breakoutRetest && breakoutRetest.tipo ? breakoutRetest.tipo : null);
+  const confirmaciones = tipoTentativo ? evaluarConfirmaciones({
+    precio,
+    soporte,
+    resistencia,
+    tendencia,
+    patronAlcista: calidad.patronAlcista,
+    patronBajista: calidad.patronBajista,
+    breakoutRetest: breakoutRetest || { tipo: null, nivel: null },
+    tipoSenal: tipoTentativo,
+  }) : null;
+
+  const checklistEl = document.getElementById(`checklist-${id}`);
+  const checklistItemsEl = document.getElementById(`checklist-items-${id}`);
+  const checklistTotalEl = document.getElementById(`checklist-total-${id}`);
+  if (checklistEl && checklistItemsEl && checklistTotalEl) {
+    if (confirmaciones) {
+      checklistEl.style.display = '';
+      const items = [confirmaciones.c1, confirmaciones.c2, confirmaciones.c3, confirmaciones.c4];
+      checklistItemsEl.innerHTML = items.map(c => `
+        <div style="display:flex;align-items:flex-start;gap:4px;font-size:10px;padding:3px 5px;border-radius:4px;background:${c.ok ? 'rgba(34,197,94,0.08)' : 'rgba(239,68,68,0.08)'}">
+          <span style="font-size:12px;line-height:1;margin-top:1px">${c.ok ? '✅' : '❌'}</span>
+          <div>
+            <div style="font-weight:600;color:var(--text-secondary)">${c.label}</div>
+            <div style="color:var(--text-faint);font-size:9px">${c.detalle}</div>
+          </div>
+        </div>`).join('');
+      const color = confirmaciones.completo ? '#22c55e' : confirmaciones.total >= 3 ? '#f59e0b' : '#ef4444';
+      checklistTotalEl.innerHTML = `<span style="color:${color};font-weight:700">${confirmaciones.total}/4 confirmaciones${confirmaciones.completo ? ' — ENTRADA VÁLIDA' : ''}</span>`;
+    } else {
+      checklistEl.style.display = 'none';
+    }
+  }
+
+  // Alerta visual de vela explosiva (Cambio #4)
+  if (explosiva && velaExplosivaDatos) {
+    html += `<div style="margin-bottom:4px;padding:4px 8px;background:rgba(245,158,11,0.12);border:1px solid #f59e0b;border-radius:5px;font-size:10px;color:#d97706;font-weight:600">⚡ Vela explosiva ×${velaExplosivaDatos.factor.toFixed(1)} — esperar normalización</div>`;
+  }
+
+  // Alerta de breakout+retest detectado (Cambio #5)
+  if (breakoutRetest && breakoutRetest.tipo) {
+    const brColor = breakoutRetest.tipo === 'BUY' ? '#22c55e' : '#ef4444';
+    const brIcon = breakoutRetest.tipo === 'BUY' ? '▲' : '▼';
+    html += `<div style="margin-bottom:4px;padding:4px 8px;background:rgba(42,120,214,0.10);border:1px solid #2a78d6;border-radius:5px;font-size:10px;color:#2a78d6;font-weight:600">${brIcon} Breakout + retest en ${breakoutRetest.nivel ? breakoutRetest.nivel.toFixed(4) : ''} — setup ${breakoutRetest.tipo}</div>`;
+  }
+
   if (senal.tipo === 'BUY') {
     tipoSenal = senal.tipo;
     const { sl, tp } = senal;
-    html = '<div class="signal signal-buy">▲ BUY</div>' + renderPlan(precio, sl, tp, 'BUY', id, calidad);
+    html += '<div class="signal signal-buy">▲ BUY</div>' + renderPlan(precio, sl, tp, 'BUY', id, calidad);
   } else if (senal.tipo === 'SELL') {
     tipoSenal = senal.tipo;
     const { sl, tp } = senal;
-    html = '<div class="signal signal-sell">▼ SELL</div>' + renderPlan(precio, sl, tp, 'SELL', id, calidad);
+    html += '<div class="signal signal-sell">▼ SELL</div>' + renderPlan(precio, sl, tp, 'SELL', id, calidad);
   } else {
-    const motivoEspera = enRango
-      ? `⊡ Rango detectado — señales desactivadas${razonRango ? ': ' + razonRango : ''}`
-      : tendencia === 'lateral'
-        ? '→ Mercado sin tendencia clara — esperando dirección'
-        : '— Esperando condiciones de entrada';
-    html = `<div class="signal signal-wait">${motivoEspera}</div>`;
+    const motivoEspera = explosiva
+      ? `⚡ Vela explosiva — esperando normalización (×${velaExplosivaDatos ? velaExplosivaDatos.factor.toFixed(1) : '?'})`
+      : enRango
+        ? `⊡ Rango detectado — señales desactivadas${razonRango ? ': ' + razonRango : ''}`
+        : tendencia === 'lateral'
+          ? '→ Mercado sin tendencia clara — esperando dirección'
+          : senal.razon || '— Esperando condiciones de entrada';
+    html += `<div class="signal signal-wait">${motivoEspera}</div>`;
   }
   el.querySelector('.signal-container').innerHTML = html;
 
@@ -2000,7 +2078,7 @@ async function agregarMercado(mercadoId = null, opciones = {}) {
       throw new Error('No se pudo cargar la librería del gráfico');
     }
 
-    const { chart, candleSeries, maSeries } = crearTarjeta(id, nombre, perfil, periodo);
+    const { chart, candleSeries, maSeries, emaSeries, srLines } = crearTarjeta(id, nombre, perfil, periodo);
     actualizarPanelAutomatico(id);
     const wsUrl = await obtenerWsUrl();
     // Usamos CIERRES DE VELA (no ticks crudos) para el análisis.
@@ -2078,14 +2156,64 @@ async function agregarMercado(mercadoId = null, opciones = {}) {
         const ma = calcularMA(cierresVela);
         const rsi = calcularRSI(cierresHistorico, periodo);
         const desv = calcularDesviacion(cierresVela, ma);
-        const { soporte, resistencia } = detectarSoporteResistencia(cierresHistorico);
+        const { soporte, resistencia, zonaSoporte, zonaResistencia } = detectarSoporteResistencia(cierresHistorico);
         const tendencia = clasificarTendencia(cierresEma, PERIODO_EMA);
         const { enRango, razon: razonRango } = detectarRango(cierresVela, rsi, soporte, resistencia);
 
+        // Cambio #4: detectar vela explosiva ANTES de evaluar señal (anti-FOMO)
+        const velaExplosivaDatos = detectarVelaExplosiva(velasParaPatrones);
+
+        // Cambio #5: detectar breakout + retest
+        const breakoutRetest = detectarBreakoutRetest(cierresHistorico, soporte, resistencia);
+
+        // EMA 200 calculada; si hay datos suficientes dibujarla en el gráfico (Cambio #1)
+        if (cierresEma.length >= PERIODO_EMA) {
+          const ema200 = calcularEMA(cierresEma, PERIODO_EMA);
+          emaSeries.update({ time: tiempoVela, value: ema200 });
+          const elCard = document.getElementById(`card-${id}`);
+          if (elCard) {
+            const emaEl = elCard.querySelector('.ema200');
+            if (emaEl) emaEl.textContent = ema200.toLocaleString(undefined, { maximumFractionDigits: 4 });
+          }
+        }
+
         maSeries.update({ time: tiempoVela, value: ma });
+
+        // Cambio #2: dibujar zonas S/R como price lines en el gráfico.
+        const mercadoRef = mercadosActivos[id];
+        if (mercadoRef) {
+          if (mercadoRef.srLines.soporte) {
+            try { candleSeries.removePriceLine(mercadoRef.srLines.soporte); } catch (_) {}
+          }
+          if (mercadoRef.srLines.resistencia) {
+            try { candleSeries.removePriceLine(mercadoRef.srLines.resistencia); } catch (_) {}
+          }
+          if (soporte !== null) {
+            mercadoRef.srLines.soporte = candleSeries.createPriceLine({
+              price: soporte,
+              color: '#22c55e',
+              lineWidth: 1,
+              lineStyle: 2,
+              axisLabelVisible: true,
+              title: `S${zonaSoporte ? ' ×' + zonaSoporte.rechazos : ''}`,
+            });
+          }
+          if (resistencia !== null) {
+            mercadoRef.srLines.resistencia = candleSeries.createPriceLine({
+              price: resistencia,
+              color: '#ef4444',
+              lineWidth: 1,
+              lineStyle: 2,
+              axisLabelVisible: true,
+              title: `R${zonaResistencia ? ' ×' + zonaResistencia.rechazos : ''}`,
+            });
+          }
+        }
+
         const resultadoSenal = actualizarTarjeta(
           id, precio, ma.toFixed(4), rsi, hora, VELAS_PARA_SENAL, desv, cierresVela,
           soporte, resistencia, tendencia, enRango, razonRango, velasParaPatrones,
+          velaExplosivaDatos, breakoutRetest,
         );
         if (mercadosActivos[id]) {
           Object.assign(mercadosActivos[id], {
@@ -2261,6 +2389,7 @@ async function agregarMercado(mercadoId = null, opciones = {}) {
       precio: null,
       desviacion: null,
       calidad: 0,
+      srLines,   // referencias a las price lines de S/R para poder reemplazarlas en cada tick
     };
     renderRankingMercados();
     return true;

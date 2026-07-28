@@ -16,9 +16,11 @@ export function createMarketCard({ id, nombre, perfil, periodo, chartTheme }) {
   div.id = `card-${id}`;
   div.innerHTML = `
     <div class="card-header">
-      <div style="display:flex;align-items:center;gap:6px">
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
         <span class="card-title">${nombre}</span>
         <span class="badge ${badgeClass(perfil)}">${badgeTexto(perfil)}</span>
+        <!-- Cambio #9: badge de tendencia prominente -->
+        <span id="tendencia-badge-${id}" style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;background:var(--bg-stat);color:var(--text-secondary);border:1px solid var(--border)">— tendencia</span>
       </div>
       <div class="card-meta">
         <span class="card-time">--:--:--</span>
@@ -30,8 +32,15 @@ export function createMarketCard({ id, nombre, perfil, periodo, chartTheme }) {
       <div class="stat"><div class="stat-label">Precio</div><div class="stat-value precio">—</div></div>
       <div class="stat"><div class="stat-label">MA (${periodo})</div><div class="stat-value ma">—</div></div>
       <div class="stat"><div class="stat-label">RSI (${periodo})</div><div class="stat-value rsi">—</div></div>
-      <div class="stat"><div class="stat-label">Tendencia</div><div class="stat-value tendencia" style="font-weight:500">—</div></div>
+      <!-- Cambio #1: EMA 200 visible como stat -->
+      <div class="stat"><div class="stat-label">EMA 200</div><div class="stat-value ema200" title="Media Móvil Exponencial de 200 periodos — filtro de tendencia principal">—</div></div>
       <div class="stat"><div class="stat-label">Velas</div><div class="stat-value ticks">0/${periodo}</div></div>
+    </div>
+    <!-- Cambio #3: Panel de las 4 confirmaciones obligatorias (Billy Chacón, Módulo 5) -->
+    <div id="checklist-${id}" style="display:none;margin:6px 0;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg-stat)">
+      <div style="font-size:10px;font-weight:700;color:var(--text-faint);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px">Checklist entrada · 4 confirmaciones</div>
+      <div id="checklist-items-${id}" style="display:grid;grid-template-columns:1fr 1fr;gap:4px"></div>
+      <div id="checklist-total-${id}" style="margin-top:5px;font-size:10px;text-align:right;color:var(--text-faint)"></div>
     </div>
     <div class="auto-toggle-row">
       <label class="auto-toggle-label">
@@ -60,12 +69,25 @@ export function createMarketCard({ id, nombre, perfil, periodo, chartTheme }) {
     upColor: '#26a69a', downColor: '#ef5350', borderVisible: false,
     wickUpColor: '#26a69a', wickDownColor: '#ef5350',
   });
+  // MA simple — línea naranja
   const maSeries = chart.addLineSeries({
     color: '#f6a623', lineWidth: 2, priceLineVisible: false, lastValueVisible: false,
+  });
+  // Cambio #1: EMA 200 — línea azul discontinua para distinguirla de la MA simple.
+  // Billy Chacón (Módulo 2): precio > EMA 200 = buscar compras; precio < EMA 200 = buscar ventas.
+  const emaSeries = chart.addLineSeries({
+    color: '#2a78d6',
+    lineWidth: 2,
+    lineStyle: 2,           // 2 = Dashed en lightweight-charts
+    priceLineVisible: false,
+    lastValueVisible: true,
+    title: 'EMA 200',
   });
   window.addEventListener('resize', () => chart.applyOptions({
     width: container.clientWidth,
     height: container.clientHeight || 200,
   }));
-  return { chart, candleSeries, maSeries };
+  // srLines almacena las price lines de S/R activas para poder quitarlas al actualizar.
+  const srLines = { soporte: null, resistencia: null };
+  return { chart, candleSeries, maSeries, emaSeries, srLines };
 }
