@@ -2246,7 +2246,7 @@ async function agregarMercado(mercadoId = null, opciones = {}) {
     actualizarPanelAutomatico(id);
     const wsUrl = await obtenerWsUrl();
     // Usamos CIERRES DE VELA (no ticks crudos) para el análisis.
-    // Con INTERVALO_VELA=15s y VELAS_PARA_SENAL=50 → 12.5 minutos de historia por señal.
+    // Con INTERVALO_VELA=15s y VELAS_PARA_SENAL=14 → 3.5 minutos de historia por señal.
     // Cada punto del MA/RSI representa 15 segundos reales, no un tick individual.
     const cierresVela = [];           // últimas VELAS_PARA_SENAL velas cerradas
     const cierresHistorico = [];      // buffer para RSI (5x periodo)
