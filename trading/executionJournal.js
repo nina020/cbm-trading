@@ -92,6 +92,16 @@ export function createExecutionJournal({ storageKey, onChange, storage = localSt
       storage.removeItem(storageKey);
       onChange(registros);
     },
+    // Elimina operaciones que quedaron abiertas y nunca se cerraron. Ensucian
+    // cualquier análisis posterior: cuentan como operación pero no tienen
+    // resultado, así que distorsionan tasas de acierto y recuentos.
+    purgarPendientes() {
+      const antes = registros.length;
+      registros = registros.filter(item => item.estado !== 'pendiente');
+      const eliminadas = antes - registros.length;
+      if (eliminadas > 0) guardar();
+      return eliminadas;
+    },
     depurarModo(modo) {
       const filtrados = registros.filter(item => item.modo !== modo);
       if (filtrados.length === registros.length) return false;

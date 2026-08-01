@@ -989,6 +989,17 @@ function limpiarRegistroEjecuciones() {
   registrarLogAuto('Registro de ejecuciones eliminado.', 'info');
 }
 
+function purgarEjecucionesPendientes() {
+  const pendientes = executionJournal.registros.filter(item => item.estado === 'pendiente').length;
+  if (!pendientes) {
+    registrarLogAuto('No hay operaciones pendientes que purgar.', 'info');
+    return;
+  }
+  if (!confirm(`¿Eliminar ${pendientes} operación(es) que quedaron abiertas y nunca se cerraron?`)) return;
+  const eliminadas = executionJournal.purgarPendientes();
+  registrarLogAuto(`${eliminadas} operación(es) pendiente(s) purgada(s).`, 'info');
+}
+
 function alternarRegistroEjecuciones() {
   const modal = document.getElementById('execution-modal');
   const boton = document.getElementById('execution-toggle');
@@ -2716,6 +2727,7 @@ Object.assign(window, {
   actualizarMercadosTop,
   cambiarFiltroEjecuciones,
   limpiarRegistroEjecuciones,
+  purgarEjecucionesPendientes,
   limpiarAuditoriaOrdenes,
   alternarRegistroEjecuciones,
   cerrarEjecuciones,

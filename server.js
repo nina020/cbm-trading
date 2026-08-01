@@ -28,6 +28,7 @@ const MICROSOFT_AUTH_ENABLED = Boolean(
   MICROSOFT_CLIENT_ID && MICROSOFT_CLIENT_SECRET && MICROSOFT_TENANT_ID && SESSION_SECRET,
 );
 const INDEX_PATH = path.join(__dirname, 'index.html');
+const PANEL_VIVO_PATH = path.join(__dirname, 'panel-vivo.html');
 const CHARTS_PATH = path.join(
   __dirname,
   'node_modules/lightweight-charts/dist/lightweight-charts.standalone.production.js',
@@ -649,6 +650,19 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       await handleApi(req, res);
+      return;
+    }
+
+    // Panel de análisis en vivo. Va después de la comprobación de sesión, así
+    // que queda protegido igual que el resto de la aplicación.
+    if (req.method === 'GET' && (parsedPath === '/panel-vivo' || parsedPath === '/panel-vivo.html')) {
+      const html = await fs.readFile(PANEL_VIVO_PATH);
+      aplicarHeadersSeguridad(res);
+      res.writeHead(200, {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'no-store',
+      });
+      res.end(html);
       return;
     }
 

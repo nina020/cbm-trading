@@ -595,6 +595,7 @@ table.history-table tr:last-child td { border-bottom: none; }
     <button class="side-link" onclick="actualizarMercadosTop()">Mercados top</button>
     <button class="side-link" onclick="abrirPosiciones()">Posiciones</button>
     <button class="side-link" onclick="alternarRegistroEjecuciones()">Ejecuciones</button>
+    <button class="side-link" onclick="window.open('/panel-vivo', 'cbm-panel-vivo')">Análisis en vivo ↗</button>
     <button class="side-link" onclick="abrirEvaluacionSemanal()">Evaluación</button>
     <button class="side-link" onclick="abrirConfiguracionSenales()">Señales</button>
     <button class="side-link" onclick="abrirConfiguracionRiesgo()">Riesgo</button>
@@ -790,6 +791,7 @@ table.history-table tr:last-child td { border-bottom: none; }
       <label>Cooldown entre operaciones (por mercado):</label>
       <input type="number" id="cooldown-input" value="60" min="5" step="5" onchange="actualizarCooldown(this.value)">
       <span>seg</span>
+      <button class="btn-clear" onclick="purgarEjecucionesPendientes()">Purgar pendientes</button>
       <button class="btn-clear" onclick="limpiarRegistroEjecuciones()">Limpiar registro</button>
     </div>
     <div id="execution-details">

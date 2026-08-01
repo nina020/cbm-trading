@@ -1,0 +1,669 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Panel en vivo · sintéticos de Deriv</title>
+<style>
+  :root { color-scheme: light dark; }
+  .viz-root {
+    --surface-1: #fcfcfb; --surface-2: #f3f3f0;
+    --text-primary: #0b0b0b; --text-secondary: #52514e; --text-muted: #78776f;
+    --grid: #e4e4de; --axis: #c9c9c2;
+    --precio: #2a78d6; --media: #eb6834; --spike: #1baf7a;
+    --cono-95: rgba(42,120,214,.13); --cono-68: rgba(42,120,214,.26);
+    --sl: #52514e; --tp: #52514e;
+    --zona-riesgo: rgba(192,57,43,.09); --zona-beneficio: rgba(27,175,122,.09);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) .viz-root {
+      --surface-1: #1a1a19; --surface-2: #242422;
+      --text-primary: #fff; --text-secondary: #c3c2b7; --text-muted: #91908a;
+      --grid: #302f2d; --axis: #45443f;
+      --precio: #3987e5; --media: #d95926; --spike: #199e70;
+      --cono-95: rgba(57,135,229,.15); --cono-68: rgba(57,135,229,.30);
+    --sl: #c3c2b7; --tp: #c3c2b7;
+    --zona-riesgo: rgba(230,103,103,.11); --zona-beneficio: rgba(25,158,112,.11);
+    }
+  }
+  :root[data-theme="dark"] .viz-root {
+    --surface-1: #1a1a19; --surface-2: #242422;
+    --text-primary: #fff; --text-secondary: #c3c2b7; --text-muted: #91908a;
+    --grid: #302f2d; --axis: #45443f;
+    --precio: #3987e5; --media: #d95926; --spike: #199e70;
+    --cono-95: rgba(57,135,229,.15); --cono-68: rgba(57,135,229,.30);
+    --sl: #c3c2b7; --tp: #c3c2b7;
+    --zona-riesgo: rgba(230,103,103,.11); --zona-beneficio: rgba(25,158,112,.11);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; }
+  .viz-root { background: var(--surface-1); color: var(--text-primary);
+    font: 14px/1.5 ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif;
+    padding: 20px; min-height: 100vh; }
+  .envoltorio { max-width: 1120px; margin: 0 auto; }
+  .cabecera { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+  h1 { font-size: 18px; font-weight: 600; margin: 0; letter-spacing: -.01em; }
+  .estado { font-size: 12.5px; color: var(--text-secondary); display: inline-flex; align-items: center; gap: 6px; }
+  .punto-estado { width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); flex: none; }
+  .punto-estado.vivo { background: var(--spike); animation: latido 2s ease-in-out infinite; }
+  @keyframes latido { 0%,100% { opacity: 1 } 50% { opacity: .35 } }
+  .controles { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 14px 0 4px; }
+  select, button { font: inherit; font-size: 13px; padding: 6px 10px; border-radius: 6px;
+    border: 1px solid var(--axis); background: var(--surface-2); color: var(--text-primary); cursor: pointer; }
+  .cifras { display: flex; gap: 26px; flex-wrap: wrap; margin: 14px 0 10px; }
+  .cifra .rotulo { font-size: 11.5px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .04em; }
+  .cifra .valor { font-size: 25px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -.02em; line-height: 1.15; }
+  .leyenda { display: flex; flex-wrap: wrap; gap: 15px; margin: 2px 0 10px; font-size: 12.5px; color: var(--text-secondary); }
+  .clave { display: inline-flex; align-items: center; gap: 6px; }
+  .muestra { width: 14px; height: 2px; border-radius: 1px; flex: none; }
+  .muestra.area { height: 11px; border-radius: 2px; }
+  .muestra.punto { width: 9px; height: 9px; border-radius: 50%; }
+  .muestra.discontinua { background: repeating-linear-gradient(90deg, var(--sl) 0 4px, transparent 4px 7px); }
+  .muestra.punteada { height: 1px; background: repeating-linear-gradient(90deg, var(--text-muted) 0 2px, transparent 2px 5px); }
+  .rotulo-grupo { font-size: 12.5px; color: var(--text-secondary); }
+  .campo { font-size: 12.5px; color: var(--text-secondary); display: inline-flex; align-items: center; gap: 5px; }
+  .campo input { font: inherit; font-size: 12.5px; width: 72px; padding: 5px 7px; border-radius: 5px;
+    border: 1px solid var(--axis); background: var(--surface-2); color: var(--text-primary); }
+  .resumen { font-size: 12.5px; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+  .lienzo { position: relative; }
+  svg.arrastrable { cursor: grab; }
+  svg.arrastrando { cursor: grabbing; }
+  svg { display: block; width: 100%; height: auto; }
+  .rejilla { stroke: var(--grid); stroke-width: 1; }
+  .eje { stroke: var(--axis); stroke-width: 1; }
+  .etiqueta-eje { fill: var(--text-muted); font-size: 11px; }
+  .etiqueta-directa { font-size: 11.5px; font-weight: 600; }
+  #consejo { position: absolute; pointer-events: none; background: var(--surface-1); border: 1px solid var(--axis);
+    border-radius: 6px; padding: 8px 10px; font-size: 12px; box-shadow: 0 4px 14px rgba(0,0,0,.14);
+    opacity: 0; transition: opacity .1s; white-space: nowrap; z-index: 5; }
+  #consejo .fila { display: flex; justify-content: space-between; gap: 14px; }
+  #consejo .fila span:last-child { font-variant-numeric: tabular-nums; font-weight: 600; }
+  #consejo .fila span:first-child { color: var(--text-secondary); }
+  .aviso { background: var(--surface-2); border-left: 3px solid var(--media); padding: 11px 13px; margin: 16px 0 0;
+    font-size: 12.5px; color: var(--text-secondary); border-radius: 0 4px 4px 0; }
+  .aviso strong { color: var(--text-primary); }
+  table { border-collapse: collapse; width: 100%; margin-top: 12px; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+  th, td { text-align: right; padding: 5px 9px; border-bottom: 1px solid var(--grid); }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--text-secondary); font-weight: 600; }
+  #tabla[hidden] { display: none; }
+</style>
+</head>
+<body>
+<div class="viz-root">
+<div class="envoltorio">
+
+  <div class="cabecera">
+    <h1 id="titulo">Panel en vivo</h1>
+    <span class="estado"><span class="punto-estado" id="punto"></span><span id="txtEstado">conectando…</span></span>
+  </div>
+
+  <div class="controles">
+    <select id="simbolo"></select>
+    <select id="granularidad">
+      <option value="60" selected>velas de 1 min</option>
+      <option value="300">velas de 5 min</option>
+      <option value="900">velas de 15 min</option>
+    </select>
+    <button id="alternar" aria-expanded="false" aria-controls="tabla">Ver tabla</button>
+    <button id="verProyeccion" title="Acerca la vista a la zona proyectada">Acercar a la proyección</button>
+    <button id="reiniciarZoom" title="Vuelve a la vista completa">Vista completa</button>
+  </div>
+
+  <div class="controles" id="panelRiesgo">
+    <span class="rotulo-grupo">Niveles según el libro (1:2):</span>
+    <select id="direccion">
+      <option value="ninguna" selected>sin operación</option>
+      <option value="compra">si compro</option>
+      <option value="venta">si vendo</option>
+    </select>
+    <label class="campo">balance <input id="balance" type="number" value="1000" min="1" step="50"></label>
+    <label class="campo">riesgo % <input id="riesgoPct" type="number" value="1" min="0.1" max="10" step="0.5"></label>
+    <label class="campo">stop en ATR <input id="multiploAtr" type="number" value="1.5" min="0.5" max="5" step="0.5"></label>
+    <span id="resumenRiesgo" class="resumen"></span>
+  </div>
+
+  <div class="cifras">
+    <div class="cifra"><div class="rotulo">Precio</div><div class="valor" id="precio" style="color:var(--precio)">—</div></div>
+    <div class="cifra"><div class="rotulo">Ticks recibidos</div><div class="valor" id="conteo">0</div></div>
+    <div class="cifra"><div class="rotulo" id="rotSpike">Último spike</div><div class="valor" id="spike">—</div></div>
+  </div>
+
+  <div class="leyenda">
+    <span class="clave"><span class="muestra" style="background:var(--precio)"></span> Precio</span>
+    <span class="clave"><span class="muestra" style="background:var(--media)"></span> Media móvil 20</span>
+    <span class="clave"><span class="muestra area" style="background:var(--cono-68)"></span> Rango probable 68 %</span>
+    <span class="clave"><span class="muestra area" style="background:var(--cono-95)"></span> Rango probable 95 %</span>
+    <span class="clave"><span class="muestra punteada"></span> Envolvente de toque (95 %)</span>
+    <span class="clave" id="clvSpike" hidden><span class="muestra punto" style="background:var(--spike)"></span> Spike</span>
+    <span class="clave"><span class="muestra discontinua"></span> Stop loss (SL)</span>
+    <span class="clave"><span class="muestra area" style="background:var(--zona-beneficio)"></span> Zona de beneficio (TP)</span>
+  </div>
+
+  <div class="lienzo"><svg id="g" viewBox="0 0 980 430" role="img" aria-label="Gráfico en vivo"></svg><div id="consejo"></div></div>
+
+  <div class="aviso">
+    <strong>El cono proyecta rango, no dirección.</strong> Se recalcula con los retornos reales que van llegando. <strong>No dice cuándo pasará nada.</strong>
+    La banda rellena es dónde <em>estará</em> el precio en ese instante; la línea punteada es hasta dónde
+    <em>habrá llegado</em> en algún momento del trayecto, que es la que gobierna si salta un stop. Tocar un borde
+    no anuncia un rebote: indica que el precio llegó a un sitio al que solo llega 5 de cada 100 veces.
+  </div>
+
+  <div id="tabla" hidden></div>
+</div>
+</div>
+
+<script type="module">
+const CATALOGO = [
+  ['BOOM300N','Boom 300','boom'], ['BOOM500','Boom 500','boom'], ['BOOM600','Boom 600','boom'],
+  ['BOOM900','Boom 900','boom'], ['BOOM1000','Boom 1000','boom'],
+  ['CRASH300N','Crash 300','crash'], ['CRASH500','Crash 500','crash'], ['CRASH600','Crash 600','crash'],
+  ['CRASH900','Crash 900','crash'], ['CRASH1000','Crash 1000','crash'],
+  ['stpRNG','Step 100','step'], ['stpRNG2','Step 200','step'], ['stpRNG3','Step 300','step'],
+  ['stpRNG4','Step 400','step'], ['stpRNG5','Step 500','step'],
+  ['R_10','Volatility 10','vol'], ['R_25','Volatility 25','vol'], ['R_50','Volatility 50','vol'],
+  ['R_75','Volatility 75','vol'], ['R_100','Volatility 100','vol'],
+  ['1HZ10V','Volatility 10 (1s)','vol'], ['1HZ25V','Volatility 25 (1s)','vol'],
+  ['1HZ50V','Volatility 50 (1s)','vol'], ['1HZ75V','Volatility 75 (1s)','vol'], ['1HZ100V','Volatility 100 (1s)','vol'],
+];
+
+const APP_ID = new URLSearchParams(location.search).get('app_id') || '1089';
+const VELAS = 200, PASOS = 45, CAMINOS = 1500;
+
+const $ = id => document.getElementById(id);
+const selSimbolo = $('simbolo'), selGran = $('granularidad');
+for (const [cod, nom] of CATALOGO) selSimbolo.add(new Option(nom, cod));
+selSimbolo.value = 'BOOM1000';
+
+let ws = null, velas = [], ticks = [], proyeccion = [], spikes = new Set();
+let idSuscripciones = [], conteoTicks = 0, ultimoSpike = null, derivaTipica = 0;
+
+const meta = () => CATALOGO.find(c => c[0] === selSimbolo.value);
+const esBoomCrash = () => ['boom','crash'].includes(meta()?.[2]);
+
+// ── indicadores ──────────────────────────────────────────────────────────
+function ema(vals, per) {
+  const out = new Array(vals.length).fill(null);
+  if (vals.length < per) return out;
+  const k = 2 / (per + 1);
+  let prev = vals.slice(0, per).reduce((a,b) => a+b, 0) / per;
+  out[per-1] = prev;
+  for (let i = per; i < vals.length; i++) { prev = vals[i]*k + prev*(1-k); out[i] = prev; }
+  return out;
+}
+const mediana = a => { if (!a.length) return 0; const s=[...a].sort((x,y)=>x-y), m=s.length>>1;
+  return s.length%2 ? s[m] : (s[m-1]+s[m])/2; };
+
+// Cono por remuestreo de los retornos reales: conserva la asimetría del índice.
+//
+// Se calculan DOS envolventes distintas, porque responden a preguntas distintas
+// y confundirlas es un error caro:
+//
+//   · TERMINAL — dónde estará el precio justo en ese instante.
+//   · DE TOQUE — hasta dónde habrá llegado en algún momento del trayecto.
+//
+// La segunda es siempre más ancha: un camino puede tocar un nivel y volver.
+// Para un stop loss la que importa es la de toque, porque el stop salta al
+// tocarlo, no al cierre. Medido en estos índices, la banda de toque es entre
+// 1.07 y 1.10 veces más ancha que la terminal.
+function proyectar(cierres) {
+  const r = [];
+  for (let i = 1; i < cierres.length; i++) r.push(Math.log(cierres[i]/cierres[i-1]));
+  if (r.length < 20) return [];
+  const ultimo = cierres.at(-1);
+  const porPaso = Array.from({length: PASOS}, () => []);
+  const maxPaso = Array.from({length: PASOS}, () => []);
+  const minPaso = Array.from({length: PASOS}, () => []);
+
+  for (let c = 0; c < CAMINOS; c++) {
+    let p = ultimo, alto = ultimo, bajo = ultimo;
+    for (let s = 0; s < PASOS; s++) {
+      p *= Math.exp(r[(Math.random()*r.length)|0]);
+      if (p > alto) alto = p;
+      if (p < bajo) bajo = p;
+      porPaso[s].push(p); maxPaso[s].push(alto); minPaso[s].push(bajo);
+    }
+  }
+
+  const cuantil = (m, f) => { m.sort((a,b)=>a-b); return m[Math.min(Math.floor(f*m.length), m.length-1)]; };
+  return porPaso.map((m, s) => ({
+    p5: cuantil(m,.05), p16: cuantil(m,.16), p50: cuantil(m,.5), p84: cuantil(m,.84), p95: cuantil(m,.95),
+    tocaSup: cuantil(maxPaso[s], .95),
+    tocaInf: cuantil(minPaso[s], .05),
+  }));
+}
+
+// ── conexión ─────────────────────────────────────────────────────────────
+//
+// El app_id público 1089 sirve histórico pero NO permite suscripciones en
+// tiempo real: cualquier petición con `subscribe: 1` responde
+// "InvalidSymbol", un error engañoso que en realidad significa falta de
+// permiso (falla igual con R_100, que evidentemente existe).
+//
+// Por eso el panel intenta primero el streaming y, si lo rechazan, cae solo a
+// sondeo periódico. Con un app_id propio registrado en api.deriv.com el
+// streaming funciona y el panel lo usa sin tocar nada.
+
+const MS_SONDEO_VELAS = 3000, MS_SONDEO_TICKS = 9000;
+let pendientes = new Map(), reqId = 1, temporizadores = [], modo = '';
+
+function estado(txt, vivo) {
+  $('txtEstado').textContent = txt;
+  $('punto').classList.toggle('vivo', !!vivo);
+}
+
+function abrirSocket() {
+  return new Promise((resolver, rechazar) => {
+    if (ws && ws.readyState === 1) return resolver(ws);
+    const s = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`);
+    s.onopen = () => { ws = s; resolver(s); };
+    s.onerror = () => rechazar(new Error('No se pudo conectar con Deriv'));
+    s.onclose = () => { ws = null; estado('desconectado — reintentando', false); };
+    s.onmessage = ev => {
+      const m = JSON.parse(ev.data);
+      const p = m.req_id && pendientes.get(m.req_id);
+      if (p) {
+        pendientes.delete(m.req_id);
+        return m.error ? p.rechazar(new Error(m.error.code)) : p.resolver(m);
+      }
+      manejarStream(m);   // actualizaciones de una suscripción ya establecida
+    };
+  });
+}
+
+async function pedir(carga) {
+  const s = await abrirSocket();
+  const id = reqId++;
+  return new Promise((resolver, rechazar) => {
+    pendientes.set(id, { resolver, rechazar });
+    s.send(JSON.stringify({ ...carga, req_id: id }));
+    setTimeout(() => { if (pendientes.delete(id)) rechazar(new Error('sin respuesta')); }, 15000);
+  });
+}
+
+function aplicarVelas(lista) {
+  velas = lista.map(v => ({ t:+v.epoch, o:+v.open, h:+v.high, l:+v.low, c:+v.close }));
+  proyeccion = proyectar(velas.map(v => v.c));
+  const ultimo = velas.at(-1)?.c;
+  if (ultimo) $('precio').textContent = ultimo.toFixed(ultimo > 1000 ? 2 : 3);
+  dibujar();
+}
+
+/** Detecta spikes sobre ticks, que es la resolución correcta. */
+function revisarTicks(serie) {
+  conteoTicks = serie.length;
+  $('conteo').textContent = conteoTicks.toLocaleString('es');
+  if (!esBoomCrash() || serie.length < 80) return;
+
+  const r = [];
+  for (let i = 1; i < serie.length; i++) r.push((serie[i] - serie[i-1]) / serie[i-1]);
+  derivaTipica = mediana(r.map(Math.abs));
+  if (!derivaTipica) return;
+
+  const signo = meta()[2] === 'crash' ? -1 : 1;
+  let ultimoIndice = -1;
+  r.forEach((x, i) => { if (signo * x > 5 * derivaTipica) ultimoIndice = i; });
+  if (ultimoIndice < 0) { $('spike').textContent = 'ninguno en la ventana'; return; }
+
+  const ticksAtras = r.length - ultimoIndice;
+  $('spike').textContent = 'hace ' + ticksAtras + ' ticks';
+  // Se marca sobre la última vela: el spike acaba de ocurrir en el flujo.
+  if (ticksAtras < 30) spikes.add(velas.length - 1);
+}
+
+function manejarStream(m) {
+  if (m.ohlc) {
+    const o = m.ohlc, t = +o.open_time;
+    const nueva = { t, o:+o.open, h:+o.high, l:+o.low, c:+o.close };
+    if (velas.length && velas.at(-1).t === t) velas[velas.length-1] = nueva;
+    else { velas.push(nueva); if (velas.length > VELAS) velas.shift();
+           proyeccion = proyectar(velas.map(v => v.c)); }
+    $('precio').textContent = nueva.c.toFixed(nueva.c > 1000 ? 2 : 3);
+    dibujar();
+  }
+  if (m.tick) {
+    ticks.push(+m.tick.quote);
+    if (ticks.length > 2000) ticks.shift();
+    revisarTicks(ticks);
+  }
+}
+
+async function conectar() {
+  temporizadores.forEach(clearInterval);
+  temporizadores = [];
+  velas = []; ticks = []; proyeccion = []; spikes = new Set();
+  conteoTicks = 0; ultimoSpike = null;
+  $('conteo').textContent = '0'; $('spike').textContent = '—'; $('precio').textContent = '—';
+  $('tabla').innerHTML = '';   // no dejar filas del símbolo anterior ni siquiera ocultas
+
+  const gran = Number(selGran.value), sim = selSimbolo.value;
+  $('titulo').textContent = meta()[1] + ' — en vivo';
+  $('clvSpike').hidden = !esBoomCrash();
+  $('rotSpike').textContent = esBoomCrash() ? 'Último spike' : 'Rango de la sesión';
+  estado('conectando…', false);
+
+  const peticionVelas = { ticks_history: sim, end:'latest', count: VELAS, style:'candles', granularity: gran };
+  const peticionTicks = { ticks_history: sim, end:'latest', count: 800, style:'ticks' };
+
+  // 1) ¿Permite este app_id suscribirse en tiempo real?
+  try {
+    const r = await pedir({ ...peticionVelas, subscribe: 1 });
+    aplicarVelas(r.candles || []);
+    await pedir({ ticks: sim, subscribe: 1 });
+    modo = 'streaming';
+    estado('en vivo · streaming', true);
+    return;
+  } catch {
+    modo = 'sondeo';
+  }
+
+  // 2) Si no, sondeo periódico. Igual de en vivo, solo que a intervalos.
+  const ciclarVelas = async () => {
+    try { aplicarVelas((await pedir(peticionVelas)).candles || []);
+          estado(`en vivo · sondeo cada ${MS_SONDEO_VELAS/1000} s`, true); }
+    catch (e) { estado('reintentando — ' + e.message, false); }
+  };
+  const ciclarTicks = async () => {
+    try { const r = await pedir(peticionTicks);
+          revisarTicks((r.history?.prices || []).map(Number)); }
+    catch {}
+  };
+
+  await ciclarVelas();
+  await ciclarTicks();
+  temporizadores.push(setInterval(ciclarVelas, MS_SONDEO_VELAS));
+  temporizadores.push(setInterval(ciclarTicks, MS_SONDEO_TICKS));
+}
+
+// ── dibujo ───────────────────────────────────────────────────────────────
+const NS = 'http://www.w3.org/2000/svg';
+const el = (n,a={}) => { const e = document.createElementNS(NS,n); for (const k in a) e.setAttribute(k,a[k]); return e; };
+const svg = $('g');
+const W = 980, H = 430, M = { t:16, r:92, b:30, l:8 };
+let X, Y, nH;
+
+// Ventana visible en índices de vela. null = vista completa.
+let vista = null;
+let totalActual = 0;
+
+function limitesVista(total) {
+  if (!vista) return [0, total - 1];
+  const min = 8;   // no dejar acercar tanto que el gráfico pierda sentido
+  let [a, b] = vista;
+  a = Math.max(0, Math.min(a, total - 1 - min));
+  b = Math.min(total - 1, Math.max(b, a + min));
+  return [a, b];
+}
+
+function dibujar() {
+  if (velas.length < 25) return;
+  svg.textContent = '';
+  const cierres = velas.map(v => v.c);
+  nH = cierres.length;
+  const nP = proyeccion.length, total = nH + nP;
+  totalActual = total;
+  const media20 = ema(cierres, 20);
+
+  const [i0, i1] = limitesVista(total);
+
+  // La escala vertical se calcula SOLO con lo visible: así, al acercarse a la
+  // proyección, el cono se amplía de verdad en lugar de quedar aplastado por
+  // el rango del histórico completo.
+  const vals = [];
+  for (let i = Math.max(0, Math.floor(i0)); i <= Math.min(nH - 1, Math.ceil(i1)); i++) {
+    vals.push(cierres[i]);
+    if (media20[i] !== null) vals.push(media20[i]);
+  }
+  for (let i = Math.max(0, Math.floor(i0) - nH + 1); i < nP && i <= Math.ceil(i1) - nH + 1; i++) {
+    if (proyeccion[i]) { vals.push(proyeccion[i].p5); vals.push(proyeccion[i].p95); }
+  }
+  if (!vals.length) vals.push(...cierres);
+
+  let lo = Math.min(...vals), hi = Math.max(...vals);
+  const pad = (hi-lo)*0.10 || 1; lo -= pad; hi += pad;
+
+  X = i => M.l + ((i - i0)/(i1 - i0))*(W-M.l-M.r);
+  Y = v => M.t + (1-(v-lo)/(hi-lo))*(H-M.t-M.b);
+
+  // Recorte del área de trazado: al acercarse, lo que queda fuera no se cuela
+  // sobre los ejes ni las etiquetas.
+  const defs = el('defs');
+  const clip = el('clipPath',{id:'areaTrazado'});
+  clip.appendChild(el('rect',{x:M.l,y:M.t,width:W-M.l-M.r,height:H-M.t-M.b}));
+  defs.appendChild(clip); svg.appendChild(defs);
+  const capa = el('g',{'clip-path':'url(#areaTrazado)'});
+
+  // Todas las etiquetas directas comparten el carril derecho del eje, así que
+  // se reservan sus posiciones y se omite cualquier marca de rejilla que
+  // fuese a caer encima. Sin esto se solapan precio, percentiles, SL y TP.
+  const plan = calcularPlan(velas);
+  const reservadas = [Y(cierres.at(-1))];
+  if (nP) reservadas.push(Y(proyeccion.at(-1).p95), Y(proyeccion.at(-1).p5));
+  if (plan) reservadas.push(Y(plan.stop), Y(plan.objetivo));
+
+  for (let i = 0; i <= 4; i++) {
+    const v = lo + (i/4)*(hi-lo), y = Y(v);
+    svg.appendChild(el('line',{x1:M.l,y1:y,x2:W-M.r,y2:y,class:'rejilla'}));
+    if (reservadas.some(r => Math.abs(y - r) < 13)) continue;
+    const t = el('text',{x:W-M.r+7,y:y+4,class:'etiqueta-eje'});
+    t.textContent = v.toFixed(v>1000?0:2); svg.appendChild(t);
+  }
+
+  const fmt = s => new Date(s*1000).toLocaleTimeString('es',{hour:'2-digit',minute:'2-digit'});
+  const paso = Math.max(1, Math.ceil((i1 - i0)/6));
+  for (let i = Math.ceil(i0); i < Math.min(nH, i1); i += paso) {
+    const t = el('text',{x:X(i),y:H-10,class:'etiqueta-eje','text-anchor':'middle'});
+    t.textContent = fmt(velas[i].t); svg.appendChild(t);
+  }
+
+  // ── niveles de gestión: zona de riesgo y zona de beneficio ──
+  // Se dibujan primero, debajo de todo, para no tapar el precio.
+  if (plan) {
+    const yE = Y(plan.entrada), yS = Y(plan.stop), yO = Y(plan.objetivo);
+    capa.appendChild(el('rect',{x:M.l,y:Math.min(yE,yS),width:W-M.l-M.r,height:Math.abs(yS-yE),fill:'var(--zona-riesgo)'}));
+    capa.appendChild(el('rect',{x:M.l,y:Math.min(yE,yO),width:W-M.l-M.r,height:Math.abs(yO-yE),fill:'var(--zona-beneficio)'}));
+    for (const [y,color] of [[yS,'var(--sl)'],[yO,'var(--tp)']])
+      capa.appendChild(el('line',{x1:M.l,y1:y,x2:W-M.r,y2:y,stroke:color,'stroke-width':1.5,'stroke-dasharray':'6 4'}));
+  }
+
+  if (nP) {
+    const banda = (bajo,alto,relleno) => {
+      const ida = proyeccion.map((p,i)=>X(nH-1+i)+','+Y(p[alto])).join(' L');
+      const vuelta = proyeccion.map((p,i)=>X(nH-1+i)+','+Y(p[bajo])).reverse().join(' L');
+      capa.appendChild(el('path',{d:'M'+X(nH-1)+','+Y(cierres.at(-1))+' L'+ida+' L'+vuelta+' Z',fill:relleno}));
+    };
+    banda('p5','p95','var(--cono-95)');
+    banda('p16','p84','var(--cono-68)');
+
+    // Envolvente de toque: hasta dónde llega el precio en algún momento, no
+    // dónde acaba. Va como contorno punteado porque es la que gobierna si
+    // salta un stop.
+    for (const clave of ['tocaSup','tocaInf']) {
+      const d = proyeccion.map((p,i)=>(i?'L':'M')+X(nH-1+i)+','+Y(p[clave])).join(' ');
+      capa.appendChild(el('path',{d,fill:'none',stroke:'var(--text-muted)','stroke-width':1,'stroke-dasharray':'2 3'}));
+    }
+
+    capa.appendChild(el('line',{x1:X(nH-1),y1:M.t,x2:X(nH-1),y2:H-M.b,class:'eje','stroke-dasharray':'3 3'}));
+  }
+
+  const linea = (pts,color,ancho) => {
+    const d = pts.filter(Boolean).map((p,i)=>(i?'L':'M')+p[0]+','+p[1]).join(' ');
+    capa.appendChild(el('path',{d,fill:'none',stroke:color,'stroke-width':ancho,'stroke-linejoin':'round','stroke-linecap':'round'}));
+  };
+  linea(media20.map((v,i)=>v===null?null:[X(i),Y(v)]),'var(--media)',2);
+  linea(cierres.map((v,i)=>[X(i),Y(v)]),'var(--precio)',2);
+  if (nP) linea([[X(nH-1),Y(cierres.at(-1))],...proyeccion.map((p,i)=>[X(nH-1+i),Y(p.p50)])],'var(--precio)',1.5);
+
+  for (const i of spikes) if (i >= 0 && i < nH)
+    capa.appendChild(el('circle',{cx:X(i),cy:Y(cierres[i]),r:5,fill:'var(--spike)',stroke:'var(--surface-1)','stroke-width':2}));
+
+  svg.appendChild(capa);
+
+  const etq = (y,txt,color,dy=0) => { const t = el('text',{x:W-M.r+7,y:y+4+dy,class:'etiqueta-directa',fill:color});
+    t.textContent = txt; svg.appendChild(t); };
+  if (nP) { etq(Y(proyeccion.at(-1).p95),'95 %','var(--text-secondary)',-2);
+            etq(Y(proyeccion.at(-1).p5),'95 %','var(--text-secondary)',8); }
+  etq(Y(cierres.at(-1)), cierres.at(-1).toFixed(2), 'var(--precio)');
+  // Etiquetas de texto además del color: así SL y TP se distinguen aunque el
+  // lector no perciba la diferencia entre ambos tonos.
+  if (plan) { etq(Y(plan.stop), 'SL ' + plan.stop.toFixed(2), 'var(--sl)');
+              etq(Y(plan.objetivo), 'TP ' + plan.objetivo.toFixed(2), 'var(--tp)'); }
+
+  const cruz = el('line',{y1:M.t,y2:H-M.b,class:'eje',opacity:0,id:'cruz'});
+  svg.appendChild(cruz);
+  pintarTabla();
+}
+
+// ── gestión de riesgo del libro aplicada al precio actual ──
+// Ratio 1:2 y riesgo porcentual fijo; el stop sale de la volatilidad medida
+// (ATR) porque cada sintético tiene su propia escala.
+function calcularPlan(velas) {
+  const direccion = $('direccion').value;
+  if (direccion === 'ninguna' || velas.length < 20) { $('resumenRiesgo').textContent = ''; return null; }
+
+  const serie = [];
+  for (let i = 1; i < velas.length; i++) {
+    const p = velas[i-1].c;
+    serie.push(Math.max(velas[i].h - velas[i].l, Math.abs(velas[i].h - p), Math.abs(velas[i].l - p)));
+  }
+  const atr = serie.slice(-14).reduce((a,b)=>a+b,0) / Math.min(14, serie.length);
+  const balance = Math.max(1, Number($('balance').value) || 1000);
+  const riesgoPct = Math.max(0.1, Number($('riesgoPct').value) || 1);
+  const mult = Math.max(0.5, Number($('multiploAtr').value) || 1.5);
+
+  const entrada = velas.at(-1).c;
+  const distancia = atr * mult;
+  const compra = direccion === 'compra';
+  const stop = compra ? entrada - distancia : entrada + distancia;
+  const objetivo = compra ? entrada + 2*distancia : entrada - 2*distancia;
+  const riesgoDinero = balance * (riesgoPct/100);
+
+  $('resumenRiesgo').innerHTML = `riesgo <b>$${riesgoDinero.toFixed(2)}</b> · stop ${distancia.toFixed(2)} pts `
+    + `(${(distancia/entrada*100).toFixed(3)} %) · tamaño <b>${(riesgoDinero/distancia).toFixed(3)}</b> u. · `
+    + `necesitas acertar <b>33.3 %</b> para no perder`;
+
+  return { entrada, stop, objetivo, distancia, riesgoDinero };
+}
+
+const consejo = $('consejo');
+svg.addEventListener('pointermove', ev => {
+  if (!velas.length) return;
+  const caja = svg.getBoundingClientRect();
+  const [i0, i1] = limitesVista(nH + proyeccion.length);
+  const frac = ((ev.clientX-caja.left)/caja.width*W - M.l)/(W-M.l-M.r);
+  const i = Math.round(i0 + frac*(i1-i0));
+  if (i < 0 || i >= nH+proyeccion.length) return;
+  const cruz = $('cruz');
+  if (cruz) { cruz.setAttribute('x1',X(i)); cruz.setAttribute('x2',X(i)); cruz.setAttribute('opacity',1); }
+  const fmt = s => new Date(s*1000).toLocaleTimeString('es',{hour:'2-digit',minute:'2-digit'});
+  let filas;
+  if (i < nH) { const v = velas[i];
+    filas = [['Hora',fmt(v.t)],['Cierre',v.c.toFixed(2)],['Máximo',v.h.toFixed(2)],['Mínimo',v.l.toFixed(2)]]; }
+  else {
+    const p = proyeccion[i-nH], gran = Number(selGran.value);
+    // Se descuenta lo que lleva abierta la vela en curso. Sin esto, "dentro de
+    // 7 min" podía ser en realidad 6 y pico: hasta una vela entera de desfase.
+    const transcurrido = Math.max(0, Math.min(gran, Math.floor(Date.now()/1000) - velas.at(-1).t));
+    const seg = (i-nH+1)*gran - transcurrido;
+    const cuando = seg < 90 ? Math.round(seg) + ' s' : (seg/60).toFixed(1) + ' min';
+    filas = [['Dentro de', cuando],
+      ['Estará (mediana)', p.p50.toFixed(2)],
+      ['68 % estará entre', p.p16.toFixed(2)+' – '+p.p84.toFixed(2)],
+      ['95 % estará entre', p.p5.toFixed(2)+' – '+p.p95.toFixed(2)],
+      ['95 % no habrá tocado', p.tocaInf.toFixed(2)+' – '+p.tocaSup.toFixed(2)]];
+  }
+  consejo.innerHTML = filas.map(f=>'<div class="fila"><span>'+f[0]+'</span><span>'+f[1]+'</span></div>').join('');
+  consejo.style.opacity = 1;
+  // El ancho se mide en vivo: fijarlo a un número rompía el cuadro en cuanto
+  // se añadía una fila más larga.
+  const ancho = consejo.offsetWidth || 200;
+  const izq = ev.clientX - caja.left;
+  // Si no cabe a la derecha del cursor, se coloca a su izquierda.
+  consejo.style.left = Math.max(4, izq + 14 + ancho > caja.width ? izq - ancho - 14 : izq + 14) + 'px';
+  consejo.style.top = Math.max(ev.clientY-caja.top-70, 4)+'px';
+});
+svg.addEventListener('pointerleave', () => { consejo.style.opacity = 0;
+  const c = $('cruz'); if (c) c.setAttribute('opacity',0); });
+
+// La tabla se repinta en cada redibujado mientras esté visible. Si solo se
+// pintara al abrirla, al cambiar de símbolo seguiría mostrando los precios del
+// anterior — datos viejos presentados como actuales.
+function pintarTabla() {
+  const tabla = $('tabla');
+  if (tabla.hasAttribute('hidden') || !proyeccion.length) return;
+  const min = Number(selGran.value)/60;
+  tabla.innerHTML = '<table><caption style="text-align:left;color:var(--text-secondary);font-size:12.5px;padding:6px 0">Rango proyectado por percentil · '
+    + meta()[1] + '</caption><thead><tr><th>Horizonte</th><th>p5</th><th>p16</th><th>Mediana</th><th>p84</th><th>p95</th></tr></thead><tbody>'
+    + proyeccion.map((p,i)=>'<tr><td>'+((i+1)*min)+' min</td><td>'+p.p5.toFixed(2)+'</td><td>'+p.p16.toFixed(2)
+    +'</td><td>'+p.p50.toFixed(2)+'</td><td>'+p.p84.toFixed(2)+'</td><td>'+p.p95.toFixed(2)+'</td></tr>').join('')
+    + '</tbody></table>';
+}
+
+$('alternar').addEventListener('click', () => {
+  const tabla = $('tabla'), oculto = tabla.hasAttribute('hidden');
+  if (oculto) { tabla.removeAttribute('hidden'); pintarTabla(); }
+  else tabla.setAttribute('hidden','');
+  $('alternar').setAttribute('aria-expanded', String(oculto));
+  $('alternar').textContent = oculto ? 'Ocultar tabla' : 'Ver tabla';
+});
+
+// ── zoom y desplazamiento ────────────────────────────────────────────────
+// Rueda para acercar alrededor del cursor, arrastrar para desplazar, doble
+// clic para volver a la vista completa.
+svg.classList.add('arrastrable');
+
+svg.addEventListener('wheel', ev => {
+  if (!totalActual) return;
+  ev.preventDefault();
+  const caja = svg.getBoundingClientRect();
+  const [i0, i1] = limitesVista(totalActual);
+  const frac = Math.max(0, Math.min(1, ((ev.clientX-caja.left)/caja.width*W - M.l)/(W-M.l-M.r)));
+  const centro = i0 + frac*(i1-i0);
+  const factor = ev.deltaY > 0 ? 1.18 : 1/1.18;    // abajo aleja, arriba acerca
+  const ancho = (i1 - i0) * factor;
+
+  if (ancho >= totalActual - 1) { vista = null; }
+  else vista = [centro - (centro - i0)*factor, centro + (i1 - centro)*factor];
+  dibujar();
+}, { passive: false });
+
+let arrastre = null;
+svg.addEventListener('pointerdown', ev => {
+  if (!totalActual) return;
+  const [i0, i1] = limitesVista(totalActual);
+  arrastre = { x: ev.clientX, i0, i1 };
+  svg.classList.add('arrastrando');
+  svg.setPointerCapture(ev.pointerId);
+});
+svg.addEventListener('pointerup', ev => {
+  arrastre = null; svg.classList.remove('arrastrando');
+  try { svg.releasePointerCapture(ev.pointerId); } catch {}
+});
+svg.addEventListener('pointermove', ev => {
+  if (!arrastre) return;
+  const caja = svg.getBoundingClientRect();
+  const anchoIdx = arrastre.i1 - arrastre.i0;
+  const desplazamiento = ((ev.clientX - arrastre.x)/caja.width*W) / (W-M.l-M.r) * anchoIdx;
+  vista = [arrastre.i0 - desplazamiento, arrastre.i1 - desplazamiento];
+  dibujar();
+});
+svg.addEventListener('dblclick', () => { vista = null; dibujar(); });
+
+$('verProyeccion').addEventListener('click', () => {
+  if (!totalActual || !proyeccion.length) return;
+  // Últimas 30 velas de historia más toda la proyección: el tramo donde se ve
+  // cómo se abre el cono.
+  vista = [Math.max(0, velas.length - 30), totalActual - 1];
+  dibujar();
+});
+$('reiniciarZoom').addEventListener('click', () => { vista = null; dibujar(); });
+
+for (const id of ['direccion','balance','riesgoPct','multiploAtr'])
+  $(id).addEventListener('input', () => dibujar());
+
+selSimbolo.addEventListener('change', () => { vista = null; conectar(); });
+selGran.addEventListener('change', () => { vista = null; conectar(); });
+conectar();
+</script>
+</body>
+</html>
