@@ -117,7 +117,14 @@ function parseCookies(req) {
 
 function cookieOptions({ maxAge = 3600, httpOnly = true } = {}) {
   const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
-  return `Path=/; Max-Age=${maxAge}; SameSite=Strict${secure}${httpOnly ? '; HttpOnly' : ''}`;
+  // SameSite=Lax, no Strict. El retorno de OAuth llega como una navegación
+  // desde login.microsoftonline.com, y con Strict el navegador NO envía la
+  // cookie en una navegación que viene de otro sitio: la cookie de estado
+  // llegaba vacía y la validación fallaba siempre.
+  // Lax permite justamente ese caso (navegación GET de nivel superior) y sigue
+  // bloqueando el envío en peticiones POST entre sitios, que es la protección
+  // contra CSRF que se busca aquí.
+  return `Path=/; Max-Age=${maxAge}; SameSite=Lax${secure}${httpOnly ? '; HttpOnly' : ''}`;
 }
 
 function setCookie(res, name, value, options = {}) {
@@ -604,7 +611,22 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     if (req.method === 'GET' && parsedPath === '/auth/basic') {
-      solicitarAutenticacion(res);
+      // Antes esta ruta pedía autenticación SIEMPRE, incluso cuando el
+      // navegador ya enviaba credenciales correctas: el resultado era un
+      // bucle en el que la contraseña buena nunca se aceptaba.
+      if (basicAutenticado(req)) {
+        // Se emite además una sesión firmada cuando hay SESSION_SECRET, para
+        // no depender de que el navegador siga mandando la cabecera Basic.
+        if (SESSION_SECRET) {
+          setCookie(res, SESSION_COOKIE, crearSesion({
+            email: APP_USERNAME,
+            name: APP_USERNAME,
+          }), { maxAge: 8 * 60 * 60 });
+        }
+        redirigir(res, '/');
+      } else {
+        solicitarAutenticacion(res);
+      }
       return;
     }
     if (req.method === 'GET' && parsedPath === '/logout') {
