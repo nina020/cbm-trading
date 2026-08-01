@@ -1,103 +1,155 @@
 <!doctype html>
-<html lang="es">
+<html lang="es" data-theme="light">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Panel en vivo · sintéticos de Deriv</title>
+<title>CBM Trading · Análisis en vivo</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-  :root { color-scheme: light dark; }
-  .viz-root {
-    --surface-1: #fcfcfb; --surface-2: #f3f3f0;
-    --text-primary: #0b0b0b; --text-secondary: #52514e; --text-muted: #78776f;
-    --grid: #e4e4de; --axis: #c9c9c2;
-    --precio: #2a78d6; --media: #eb6834; --spike: #1baf7a;
-    --cono-95: rgba(42,120,214,.13); --cono-68: rgba(42,120,214,.26);
-    --sl: #52514e; --tp: #52514e;
-    --zona-riesgo: rgba(192,57,43,.09); --zona-beneficio: rgba(27,175,122,.09);
-  }
-  @media (prefers-color-scheme: dark) {
-    :root:where(:not([data-theme="light"])) .viz-root {
-      --surface-1: #1a1a19; --surface-2: #242422;
-      --text-primary: #fff; --text-secondary: #c3c2b7; --text-muted: #91908a;
-      --grid: #302f2d; --axis: #45443f;
-      --precio: #3987e5; --media: #d95926; --spike: #199e70;
-      --cono-95: rgba(57,135,229,.15); --cono-68: rgba(57,135,229,.30);
-    --sl: #c3c2b7; --tp: #c3c2b7;
-    --zona-riesgo: rgba(230,103,103,.11); --zona-beneficio: rgba(25,158,112,.11);
-    }
-  }
-  :root[data-theme="dark"] .viz-root {
-    --surface-1: #1a1a19; --surface-2: #242422;
-    --text-primary: #fff; --text-secondary: #c3c2b7; --text-muted: #91908a;
-    --grid: #302f2d; --axis: #45443f;
-    --precio: #3987e5; --media: #d95926; --spike: #199e70;
-    --cono-95: rgba(57,135,229,.15); --cono-68: rgba(57,135,229,.30);
-    --sl: #c3c2b7; --tp: #c3c2b7;
-    --zona-riesgo: rgba(230,103,103,.11); --zona-beneficio: rgba(25,158,112,.11);
-  }
-  * { box-sizing: border-box; }
-  body { margin: 0; }
-  .viz-root { background: var(--surface-1); color: var(--text-primary);
-    font: 14px/1.5 ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif;
-    padding: 20px; min-height: 100vh; }
-  .envoltorio { max-width: 1120px; margin: 0 auto; }
-  .cabecera { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
-  h1 { font-size: 18px; font-weight: 600; margin: 0; letter-spacing: -.01em; }
-  .estado { font-size: 12.5px; color: var(--text-secondary); display: inline-flex; align-items: center; gap: 6px; }
-  .punto-estado { width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); flex: none; }
-  .punto-estado.vivo { background: var(--spike); animation: latido 2s ease-in-out infinite; }
-  @keyframes latido { 0%,100% { opacity: 1 } 50% { opacity: .35 } }
-  .controles { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 14px 0 4px; }
-  select, button { font: inherit; font-size: 13px; padding: 6px 10px; border-radius: 6px;
-    border: 1px solid var(--axis); background: var(--surface-2); color: var(--text-primary); cursor: pointer; }
-  .cifras { display: flex; gap: 26px; flex-wrap: wrap; margin: 14px 0 10px; }
-  .cifra .rotulo { font-size: 11.5px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .04em; }
-  .cifra .valor { font-size: 25px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -.02em; line-height: 1.15; }
-  .leyenda { display: flex; flex-wrap: wrap; gap: 15px; margin: 2px 0 10px; font-size: 12.5px; color: var(--text-secondary); }
-  .clave { display: inline-flex; align-items: center; gap: 6px; }
-  .muestra { width: 14px; height: 2px; border-radius: 1px; flex: none; }
-  .muestra.area { height: 11px; border-radius: 2px; }
-  .muestra.punto { width: 9px; height: 9px; border-radius: 50%; }
-  .muestra.discontinua { background: repeating-linear-gradient(90deg, var(--sl) 0 4px, transparent 4px 7px); }
-  .muestra.punteada { height: 1px; background: repeating-linear-gradient(90deg, var(--text-muted) 0 2px, transparent 2px 5px); }
-  .rotulo-grupo { font-size: 12.5px; color: var(--text-secondary); }
-  .campo { font-size: 12.5px; color: var(--text-secondary); display: inline-flex; align-items: center; gap: 5px; }
-  .campo input { font: inherit; font-size: 12.5px; width: 72px; padding: 5px 7px; border-radius: 5px;
-    border: 1px solid var(--axis); background: var(--surface-2); color: var(--text-primary); }
-  .resumen { font-size: 12.5px; color: var(--text-primary); font-variant-numeric: tabular-nums; }
-  .lienzo { position: relative; }
-  svg.arrastrable { cursor: grab; }
-  svg.arrastrando { cursor: grabbing; }
-  svg { display: block; width: 100%; height: auto; }
-  .rejilla { stroke: var(--grid); stroke-width: 1; }
-  .eje { stroke: var(--axis); stroke-width: 1; }
-  .etiqueta-eje { fill: var(--text-muted); font-size: 11px; }
-  .etiqueta-directa { font-size: 11.5px; font-weight: 600; }
-  #consejo { position: absolute; pointer-events: none; background: var(--surface-1); border: 1px solid var(--axis);
-    border-radius: 6px; padding: 8px 10px; font-size: 12px; box-shadow: 0 4px 14px rgba(0,0,0,.14);
-    opacity: 0; transition: opacity .1s; white-space: nowrap; z-index: 5; }
-  #consejo .fila { display: flex; justify-content: space-between; gap: 14px; }
-  #consejo .fila span:last-child { font-variant-numeric: tabular-nums; font-weight: 600; }
-  #consejo .fila span:first-child { color: var(--text-secondary); }
-  .aviso { background: var(--surface-2); border-left: 3px solid var(--media); padding: 11px 13px; margin: 16px 0 0;
-    font-size: 12.5px; color: var(--text-secondary); border-radius: 0 4px 4px 0; }
-  .aviso strong { color: var(--text-primary); }
-  table { border-collapse: collapse; width: 100%; margin-top: 12px; font-size: 12.5px; font-variant-numeric: tabular-nums; }
-  th, td { text-align: right; padding: 5px 9px; border-bottom: 1px solid var(--grid); }
-  th:first-child, td:first-child { text-align: left; }
-  th { color: var(--text-secondary); font-weight: 600; }
-  #tabla[hidden] { display: none; }
+* { box-sizing: border-box; margin: 0; padding: 0; font-family: 'IBM Plex Sans', system-ui, -apple-system, sans-serif; }
+
+/* ===== Paleta Meridian — heredada de la aplicación ===== */
+:root {
+  --bg-page: #0a1a30;
+  --bg-panel: #0f2440;
+  --bg-stat: #0c1f38;
+  --border: #20385a;
+  --text-primary: #e8eef7;
+  --text-secondary: #a9bfe0;
+  --text-faint: #6f88ad;
+  --accent: #16a06a;
+  --danger: #e0483d;
+  --warning: #c98a1e;
+  --blue: #2a78d6;
+  --shadow: 0 18px 50px rgba(0,0,0,.4);
+  --radius-lg: 14px;
+  --radius-md: 10px;
+}
+[data-theme="light"] {
+  --bg-page: #f3f5f9;
+  --bg-panel: #ffffff;
+  --bg-stat: #f7f9fc;
+  --border: #e6ebf3;
+  --text-primary: #0b1f3a;
+  --text-secondary: #5b6f8d;
+  --text-faint: #8a99b0;
+  --shadow: 0 18px 50px rgba(11,31,58,.12);
+}
+
+/* Roles del gráfico, derivados de la paleta de la app.
+   El par verde/ámbar queda en la banda 6-8 de separación para daltonismo, así
+   que la identidad la cargan además las etiquetas directas y la vista de
+   tabla, nunca el color a solas. */
+:root {
+  --precio: var(--blue);
+  --media: var(--warning);
+  --spike: var(--accent);
+  --cono-95: rgba(42,120,214,.12);
+  --cono-68: rgba(42,120,214,.24);
+  --zona-riesgo: rgba(224,72,61,.10);
+  --zona-beneficio: rgba(22,160,106,.10);
+  --sl: var(--text-secondary);
+  --tp: var(--text-secondary);
+  --grid: var(--border);
+  --axis: var(--text-faint);
+  --text-muted: var(--text-faint);
+  --surface-1: var(--bg-panel);
+  --surface-2: var(--bg-stat);
+}
+
+html { overflow-x: hidden; }
+body { background: var(--bg-page); color: var(--text-primary); }
+.app-layout { min-height: 100vh; display: grid; grid-template-columns: 230px minmax(0, 1fr); }
+.sidebar { position: sticky; top: 0; height: 100vh; background: linear-gradient(180deg, var(--bg-panel), var(--bg-page)); border-right: 1px solid var(--border); padding: 18px 14px; display: flex; flex-direction: column; gap: 18px; z-index: 900; }
+.sidebar-brand { padding: 4px 6px 14px; border-bottom: 1px solid var(--border); }
+.sidebar-brand strong { display: block; font-size: 18px; color: var(--text-primary); }
+.sidebar-brand span { display: block; margin-top: 4px; font-size: 11px; color: var(--text-faint); }
+.sidebar-nav { display: flex; flex-direction: column; gap: 7px; }
+.side-link { width: 100%; border: 1px solid transparent; background: transparent; color: var(--text-secondary); border-radius: 10px; padding: 10px 12px; text-align: left; cursor: pointer; font-size: 13px; display: flex; align-items: center; gap: 9px; text-decoration: none; }
+.side-link:hover { background: var(--bg-stat); color: var(--text-primary); border-color: var(--border); }
+.side-link.primary { background: rgba(38,166,154,.12); color: var(--accent); border-color: rgba(38,166,154,.35); }
+.sidebar-footer { margin-top: auto; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-md); background: rgba(38,166,154,.08); color: var(--text-secondary); font-size: 11px; line-height: 1.35; }
+.app-main { min-width: 0; padding: 22px 26px 40px; }
+
+.header { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 18px; }
+h1 { font-size: 21px; font-weight: 600; letter-spacing: -.01em; }
+.estado { font-size: 12.5px; color: var(--text-secondary); display: inline-flex; align-items: center; gap: 7px; }
+.punto-estado { width: 8px; height: 8px; border-radius: 50%; background: var(--text-faint); flex: none; }
+.punto-estado.vivo { background: var(--accent); animation: latido 2s ease-in-out infinite; }
+@keyframes latido { 0%,100% { opacity: 1 } 50% { opacity: .35 } }
+
+.tarjeta { background: var(--bg-panel); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 18px 20px; box-shadow: var(--shadow); margin-bottom: 16px; }
+.controles { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.controles + .controles { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+select, button { font: inherit; font-size: 13px; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--bg-stat); color: var(--text-primary); cursor: pointer; }
+select:hover, button:hover { border-color: var(--text-faint); }
+.cifras { display: flex; gap: 30px; flex-wrap: wrap; margin: 16px 0 12px; }
+.cifra .rotulo { font-size: 11px; color: var(--text-faint); text-transform: uppercase; letter-spacing: .05em; }
+.cifra .valor { font-size: 27px; font-weight: 600; font-family: 'IBM Plex Mono', ui-monospace, monospace; letter-spacing: -.02em; line-height: 1.2; }
+.leyenda { display: flex; flex-wrap: wrap; gap: 16px; margin: 4px 0 12px; font-size: 12.5px; color: var(--text-secondary); }
+.clave { display: inline-flex; align-items: center; gap: 6px; }
+.muestra { width: 14px; height: 2px; border-radius: 1px; flex: none; }
+.muestra.area { height: 11px; border-radius: 2px; }
+.muestra.punto { width: 9px; height: 9px; border-radius: 50%; }
+.muestra.discontinua { background: repeating-linear-gradient(90deg, var(--sl) 0 4px, transparent 4px 7px); }
+.muestra.punteada { height: 1px; background: repeating-linear-gradient(90deg, var(--text-faint) 0 2px, transparent 2px 5px); }
+.rotulo-grupo { font-size: 12.5px; color: var(--text-faint); }
+.campo { font-size: 12.5px; color: var(--text-secondary); display: inline-flex; align-items: center; gap: 6px; }
+.campo input { font: inherit; font-size: 12.5px; font-family: 'IBM Plex Mono', ui-monospace, monospace; width: 78px; padding: 7px 9px; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--bg-stat); color: var(--text-primary); }
+.resumen { font-size: 12.5px; color: var(--text-primary); font-family: 'IBM Plex Mono', ui-monospace, monospace; }
+.lienzo { position: relative; }
+svg.arrastrable { cursor: grab; }
+svg.arrastrando { cursor: grabbing; }
+svg { display: block; width: 100%; height: auto; }
+.rejilla { stroke: var(--grid); stroke-width: 1; }
+.eje { stroke: var(--axis); stroke-width: 1; }
+.etiqueta-eje { fill: var(--text-faint); font-size: 11px; font-family: 'IBM Plex Mono', ui-monospace, monospace; }
+.etiqueta-directa { font-size: 11.5px; font-weight: 600; font-family: 'IBM Plex Mono', ui-monospace, monospace; }
+#consejo { position: absolute; pointer-events: none; background: var(--bg-panel); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 10px 12px; font-size: 12px; box-shadow: var(--shadow); opacity: 0; transition: opacity .1s; white-space: nowrap; z-index: 5; }
+#consejo .fila { display: flex; justify-content: space-between; gap: 16px; }
+#consejo .fila span:last-child { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-weight: 600; color: var(--text-primary); }
+#consejo .fila span:first-child { color: var(--text-secondary); }
+.aviso { background: var(--bg-stat); border-left: 3px solid var(--warning); padding: 12px 14px; font-size: 12.5px; color: var(--text-secondary); border-radius: 0 var(--radius-md) var(--radius-md) 0; line-height: 1.5; }
+.aviso strong { color: var(--text-primary); }
+table { border-collapse: collapse; width: 100%; margin-top: 12px; font-size: 12.5px; font-family: 'IBM Plex Mono', ui-monospace, monospace; }
+th, td { text-align: right; padding: 7px 10px; border-bottom: 1px solid var(--border); }
+th:first-child, td:first-child { text-align: left; }
+th { color: var(--text-faint); font-weight: 500; }
+#tabla[hidden] { display: none; }
+
+@media (max-width: 900px) {
+  .app-layout { grid-template-columns: 1fr; }
+  .sidebar { position: static; height: auto; }
+  .app-main { padding: 16px; }
+}
 </style>
 </head>
 <body>
-<div class="viz-root">
+<div class="app-layout">
+
+<aside class="sidebar">
+  <div class="sidebar-brand">
+    <strong>CBM Trading</strong>
+    <span>Análisis en vivo</span>
+  </div>
+  <nav class="sidebar-nav" aria-label="Navegación principal">
+    <a class="side-link" href="/">← Volver al panel</a>
+    <button class="side-link primary">Análisis en vivo</button>
+  </nav>
+  <div class="sidebar-footer">
+    Solo lectura: esta pantalla analiza y proyecta, nunca ejecuta operaciones.
+  </div>
+</aside>
+
+<main class="app-main">
 <div class="envoltorio">
 
-  <div class="cabecera">
+  <div class="header">
     <h1 id="titulo">Panel en vivo</h1>
     <span class="estado"><span class="punto-estado" id="punto"></span><span id="txtEstado">conectando…</span></span>
   </div>
 
+  <div class="tarjeta">
   <div class="controles">
     <select id="simbolo"></select>
     <select id="granularidad">
@@ -122,7 +174,9 @@
     <label class="campo">stop en ATR <input id="multiploAtr" type="number" value="1.5" min="0.5" max="5" step="0.5"></label>
     <span id="resumenRiesgo" class="resumen"></span>
   </div>
+  </div>
 
+  <div class="tarjeta">
   <div class="cifras">
     <div class="cifra"><div class="rotulo">Precio</div><div class="valor" id="precio" style="color:var(--precio)">—</div></div>
     <div class="cifra"><div class="rotulo">Ticks recibidos</div><div class="valor" id="conteo">0</div></div>
@@ -141,7 +195,9 @@
   </div>
 
   <div class="lienzo"><svg id="g" viewBox="0 0 980 430" role="img" aria-label="Gráfico en vivo"></svg><div id="consejo"></div></div>
+  </div>
 
+  <div class="tarjeta">
   <div class="aviso">
     <strong>El cono proyecta rango, no dirección.</strong> Se recalcula con los retornos reales que van llegando. <strong>No dice cuándo pasará nada.</strong>
     La banda rellena es dónde <em>estará</em> el precio en ese instante; la línea punteada es hasta dónde
@@ -150,7 +206,9 @@
   </div>
 
   <div id="tabla" hidden></div>
+  </div>
 </div>
+</main>
 </div>
 
 <script type="module">
@@ -303,7 +361,7 @@ function revisarTicks(serie) {
   const signo = meta()[2] === 'crash' ? -1 : 1;
   let ultimoIndice = -1;
   r.forEach((x, i) => { if (signo * x > 5 * derivaTipica) ultimoIndice = i; });
-  if (ultimoIndice < 0) { $('spike').textContent = 'ninguno en la ventana'; return; }
+  if (ultimoIndice < 0) { $('spike').textContent = 'ninguno'; return; }
 
   const ticksAtras = r.length - ultimoIndice;
   $('spike').textContent = 'hace ' + ticksAtras + ' ticks';
