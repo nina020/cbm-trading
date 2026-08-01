@@ -342,7 +342,8 @@ table.history-table tr:last-child td { border-bottom: none; }
     bottom: 10px;
     z-index: 950;
     display: grid;
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
     gap: 6px;
     padding: 8px;
     border: 1px solid rgba(255,255,255,.12);
@@ -772,13 +773,14 @@ table.history-table tr:last-child td { border-bottom: none; }
 </main>
 </div>
 
+<!-- Barra inferior reducida a cuatro accesos. Posiciones, Ejecuciones y
+     Configuración siguen disponibles en la barra lateral: en pantalla estrecha
+     seis botones dejan cada uno demasiado angosto para acertarle con el dedo. -->
 <nav class="mobile-bottom-nav" aria-label="Navegación móvil">
   <button onclick="navegarA('mobile-home')"><span>Inicio</span></button>
   <button onclick="actualizarMercadosTop()"><span>Top</span></button>
   <button class="primary" onclick="navegarA('markets')"><span>Operar</span></button>
-  <button onclick="abrirPosiciones()"><span>Posiciones</span></button>
-  <button onclick="alternarRegistroEjecuciones()"><span>Ejecuciones</span></button>
-  <button onclick="abrirConfiguracionSenales()"><span>Config</span></button>
+  <button onclick="window.location.href='/panel-vivo'"><span>En vivo</span></button>
 </nav>
 
 <div class="modal-overlay" id="execution-modal" onclick="cerrarEjecucionesClick(event)">
