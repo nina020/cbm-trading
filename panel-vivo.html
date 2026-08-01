@@ -97,6 +97,12 @@ select:hover, button:hover { border-color: var(--text-faint); }
 .campo { font-size: 12.5px; color: var(--text-secondary); display: inline-flex; align-items: center; gap: 6px; }
 .campo input { font: inherit; font-size: 12.5px; font-family: 'IBM Plex Mono', ui-monospace, monospace; width: 78px; padding: 7px 9px; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--bg-stat); color: var(--text-primary); }
 .resumen { font-size: 12.5px; color: var(--text-primary); font-family: 'IBM Plex Mono', ui-monospace, monospace; }
+.diagnostico { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); display: grid; gap: 8px; }
+.chequeo { display: flex; align-items: flex-start; gap: 9px; font-size: 12.5px; line-height: 1.45; }
+.chequeo .marca { flex: none; width: 18px; font-weight: 700; font-size: 13px; }
+.chequeo.bien .marca { color: var(--accent); }
+.chequeo.mal .marca { color: var(--danger); }
+.chequeo b { font-family: 'IBM Plex Mono', ui-monospace, monospace; }
 .lienzo { position: relative; }
 svg.arrastrable { cursor: grab; }
 svg.arrastrando { cursor: grabbing; }
@@ -238,9 +244,11 @@ th { color: var(--text-faint); font-weight: 500; }
     </select>
     <label class="campo">balance <input id="balance" type="number" value="1000" min="1" step="50"></label>
     <label class="campo">riesgo % <input id="riesgoPct" type="number" value="1" min="0.1" max="10" step="0.5"></label>
-    <label class="campo">stop en ATR <input id="multiploAtr" type="number" value="1.5" min="0.5" max="5" step="0.5"></label>
+    <label class="campo">stop en ATR <input id="multiploAtr" type="number" value="1.5" min="0.5" max="30" step="0.5"></label>
+    <label class="campo">aguanto <input id="horizonte" type="number" value="15" min="2" max="45" step="1"> velas</label>
     <span id="resumenRiesgo" class="resumen"></span>
   </div>
+  <div id="diagnostico" class="diagnostico" hidden></div>
   </div>
 
   <div class="tarjeta">
@@ -644,12 +652,63 @@ function dibujar() {
   pintarTabla();
 }
 
+/**
+ * Contrasta el stop y el objetivo contra la proyección al horizonte elegido.
+ *
+ * No dice si la operación acertará —eso no se puede saber— sino si el plan
+ * sobrevive al movimiento normal del instrumento:
+ *
+ *   · El STOP se compara con la envolvente de TOQUE, porque un stop salta al
+ *     tocarlo. Si queda dentro, el ruido lo barre sin que pase nada especial.
+ *   · El OBJETIVO se compara con la banda terminal, porque llegar exige que el
+ *     precio efectivamente esté allí. Si queda fuera del 95 %, no da tiempo.
+ */
+function diagnosticar({ compra, stop, objetivo, entrada }) {
+  const caja = $('diagnostico');
+  const h = Math.min(Math.max(2, Number($('horizonte').value) || 15), proyeccion.length) - 1;
+  if (!proyeccion.length || h < 0) { caja.hidden = true; return; }
+
+  const p = proyeccion[h];
+  const minutos = ((h + 1) * Number(selGran.value) / 60).toFixed(0);
+
+  // Un stop está a salvo del ruido si queda MÁS ALLÁ del borde de toque.
+  const bordeToque = compra ? p.tocaInf : p.tocaSup;
+  const stopSeguro = compra ? stop < bordeToque : stop > bordeToque;
+
+  // Un objetivo es alcanzable si cae dentro de donde el precio suele estar.
+  const borde68 = compra ? p.p84 : p.p16;
+  const borde95 = compra ? p.p95 : p.p5;
+  const alcanzable = compra ? objetivo <= borde68 : objetivo >= borde68;
+  const imposible = compra ? objetivo > borde95 : objetivo < borde95;
+
+  const fila = (ok, texto) =>
+    `<div class="chequeo ${ok ? 'bien' : 'mal'}"><span class="marca">${ok ? '✓' : '✕'}</span><span>${texto}</span></div>`;
+
+  caja.innerHTML =
+    fila(stopSeguro,
+      stopSeguro
+        ? `Tu stop en <b>${stop.toFixed(2)}</b> queda fuera del ruido de ${minutos} min (borde de toque <b>${bordeToque.toFixed(2)}</b>).`
+        : `Tu stop en <b>${stop.toFixed(2)}</b> está DENTRO del ruido de ${minutos} min: el precio llega a <b>${bordeToque.toFixed(2)}</b> el 5 % de las veces sin que ocurra nada. Amplía el múltiplo de ATR.`)
+    + fila(alcanzable && !imposible,
+      imposible
+        ? `Tu objetivo en <b>${objetivo.toFixed(2)}</b> queda fuera del 95 % a ${minutos} min: en ese plazo casi nunca se llega. Recórtalo o aguanta más.`
+        : alcanzable
+          ? `Tu objetivo en <b>${objetivo.toFixed(2)}</b> cae dentro del rango habitual a ${minutos} min (borde 68 % <b>${borde68.toFixed(2)}</b>).`
+          : `Tu objetivo en <b>${objetivo.toFixed(2)}</b> supera el 68 % a ${minutos} min (<b>${borde68.toFixed(2)}</b>): se llega, pero menos de una vez de cada tres.`)
+    + `<div class="chequeo"><span class="marca">·</span><span>Ninguno de estos dos avisos predice la dirección. Solo comprueban que tu plan aguante el movimiento normal del instrumento.</span></div>`;
+  caja.hidden = false;
+}
+
 // ── gestión de riesgo del libro aplicada al precio actual ──
 // Ratio 1:2 y riesgo porcentual fijo; el stop sale de la volatilidad medida
 // (ATR) porque cada sintético tiene su propia escala.
 function calcularPlan(velas) {
   const direccion = $('direccion').value;
-  if (direccion === 'ninguna' || velas.length < 20) { $('resumenRiesgo').textContent = ''; return null; }
+  if (direccion === 'ninguna' || velas.length < 20) {
+    $('resumenRiesgo').textContent = '';
+    $('diagnostico').hidden = true;
+    return null;
+  }
 
   const serie = [];
   for (let i = 1; i < velas.length; i++) {
@@ -667,6 +726,8 @@ function calcularPlan(velas) {
   const stop = compra ? entrada - distancia : entrada + distancia;
   const objetivo = compra ? entrada + 2*distancia : entrada - 2*distancia;
   const riesgoDinero = balance * (riesgoPct/100);
+
+  diagnosticar({ compra, stop, objetivo, entrada });
 
   $('resumenRiesgo').innerHTML = `riesgo <b>$${riesgoDinero.toFixed(2)}</b> · stop ${distancia.toFixed(2)} pts `
     + `(${(distancia/entrada*100).toFixed(3)} %) · tamaño <b>${(riesgoDinero/distancia).toFixed(3)}</b> u. · `
@@ -788,7 +849,7 @@ $('verProyeccion').addEventListener('click', () => {
 });
 $('reiniciarZoom').addEventListener('click', () => { vista = null; dibujar(); });
 
-for (const id of ['direccion','balance','riesgoPct','multiploAtr'])
+for (const id of ['direccion','balance','riesgoPct','multiploAtr','horizonte'])
   $(id).addEventListener('input', () => dibujar());
 
 selSimbolo.addEventListener('change', () => { vista = null; conectar(); });
