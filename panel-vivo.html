@@ -307,6 +307,7 @@ selSimbolo.value = 'BOOM1000';
 
 let ws = null, velas = [], ticks = [], proyeccion = [], spikes = new Set();
 let muestrasExtremos = null;
+let trayectorias = null;   // recorrido de cada camino, para medir cuándo toca
 let idSuscripciones = [], conteoTicks = 0, ultimoSpike = null, derivaTipica = 0;
 
 const meta = () => CATALOGO.find(c => c[0] === selSimbolo.value);
@@ -343,18 +344,28 @@ function proyectar(cierres) {
   if (r.length < 20) return [];
   const ultimo = cierres.at(-1);
   const porPaso = Array.from({length: PASOS}, () => []);
-  const maxPaso = Array.from({length: PASOS}, () => []);
-  const minPaso = Array.from({length: PASOS}, () => []);
+
+  // Se guarda la trayectoria de máximos y mínimos de CADA camino, no solo el
+  // resumen por paso. Con la trayectoria completa se puede responder además
+  // cuándo toca un nivel: como el máximo acumulado solo crece, el primer paso
+  // que lo alcanza se localiza por búsqueda binaria.
+  const caminosMax = [], caminosMin = [];
 
   for (let c = 0; c < CAMINOS; c++) {
     let p = ultimo, alto = ultimo, bajo = ultimo;
+    const trazaMax = new Float64Array(PASOS), trazaMin = new Float64Array(PASOS);
     for (let s = 0; s < PASOS; s++) {
       p *= Math.exp(r[(Math.random()*r.length)|0]);
       if (p > alto) alto = p;
       if (p < bajo) bajo = p;
-      porPaso[s].push(p); maxPaso[s].push(alto); minPaso[s].push(bajo);
+      porPaso[s].push(p); trazaMax[s] = alto; trazaMin[s] = bajo;
     }
+    caminosMax.push(trazaMax); caminosMin.push(trazaMin);
   }
+
+  const maxPaso = Array.from({length: PASOS}, (_, s) => caminosMax.map(t => t[s]));
+  const minPaso = Array.from({length: PASOS}, (_, s) => caminosMin.map(t => t[s]));
+  trayectorias = { max: caminosMax, min: caminosMin };
 
   // Se guardan las muestras de máximos y mínimos por paso, ya ordenadas, para
   // poder responder después "¿qué probabilidad hay de tocar el nivel X?" sobre
@@ -640,8 +651,12 @@ function dibujar() {
     svg.appendChild(el('line',{x1:M.l,y1:yN,x2:W-M.r,y2:yN,stroke:'var(--text-primary)','stroke-width':1.5,'stroke-dasharray':'7 4'}));
     const paso = Math.min(Math.max(1, Number($('minutosConsulta').value) || 15), proyeccion.length) - 1;
     const p = probabilidadDeTocar(nivelSeleccionado, paso);
+    const cuando = tiempoHastaTocar(nivelSeleccionado, paso);
+    const porVela = Number(selGran.value) / 60;
     const t1 = el('text',{x:M.l+8,y:yN-7,class:'etiqueta-directa',fill:'var(--text-primary)'});
-    t1.textContent = nivelSeleccionado.toFixed(2) + (p === null ? '' : '  ·  ' + (p*100).toFixed(1) + ' % de tocarlo');
+    t1.textContent = nivelSeleccionado.toFixed(2)
+      + (p === null ? '' : '  ·  ' + (p*100).toFixed(1) + ' % de tocarlo')
+      + (cuando === null ? '' : '  ·  suele tardar ' + (cuando.mediana * porVela).toFixed(0) + ' min');
     svg.appendChild(t1);
   }
 
@@ -741,6 +756,37 @@ function probabilidadDeTocar(nivel, pasoIndice) {
   return alcanzan / muestras.length;
 }
 
+/**
+ * ¿Cuánto tarda el precio en tocar un nivel, entre los caminos que lo tocan?
+ *
+ * Devuelve los cuartiles en pasos. Es una respuesta condicionada: describe a
+ * los que llegan, no a todos. Si solo el 20 % alcanza el nivel, la mediana
+ * habla de ese 20 % — por eso siempre se muestra junto a la probabilidad.
+ */
+function tiempoHastaTocar(nivel, pasoLimite) {
+  if (!trayectorias || !velas.length) return null;
+  const arriba = nivel > velas.at(-1).c;
+  const trazas = arriba ? trayectorias.max : trayectorias.min;
+  const pasos = [];
+
+  for (const traza of trazas) {
+    // El extremo acumulado es monótono, así que basta una búsqueda binaria
+    // para hallar el primer paso que alcanza el nivel.
+    if (arriba ? traza[pasoLimite] < nivel : traza[pasoLimite] > nivel) continue;
+    let lo = 0, hi = pasoLimite;
+    while (lo < hi) {
+      const m = (lo + hi) >> 1;
+      if (arriba ? traza[m] >= nivel : traza[m] <= nivel) hi = m; else lo = m + 1;
+    }
+    pasos.push(lo + 1);
+  }
+  if (pasos.length < 20) return null;
+
+  pasos.sort((a, b) => a - b);
+  const q = f => pasos[Math.min(Math.floor(f * pasos.length), pasos.length - 1)];
+  return { n: pasos.length, p25: q(0.25), mediana: q(0.5), p75: q(0.75) };
+}
+
 function pintarEscalera() {
   const caja = $('escalera');
   if (!proyeccion.length || !velas.length || !muestrasExtremos) { caja.innerHTML = ''; return; }
@@ -760,20 +806,26 @@ function pintarEscalera() {
   if (Number.isFinite(consulta) && consulta > 0) niveles.push(consulta);
   niveles.sort((a, b) => b - a);
 
+  const porVela = Number(selGran.value) / 60;
   const filas = niveles.map((n) => {
     const esActual = Math.abs(n - precio) < 1e-9;
     const prob = esActual ? null : probabilidadDeTocar(n, paso);
     const pct = prob === null ? '—' : (prob * 100).toFixed(1) + ' %';
     const ancho = prob === null ? 0 : Math.round(prob * 90);
+    const t = esActual ? null : tiempoHastaTocar(n, paso);
+    const cuando = t === null
+      ? '—'
+      : `${(t.mediana * porVela).toFixed(0)} min <span style="color:var(--text-faint)">(${(t.p25 * porVela).toFixed(0)}–${(t.p75 * porVela).toFixed(0)})</span>`;
     const marca = Number.isFinite(consulta) && Math.abs(n - consulta) < 1e-9 ? ' ←' : '';
     return `<tr class="${esActual ? 'actual' : ''}"><td>${n.toFixed(2)}${esActual ? ' (ahora)' : marca}</td>`
       + `<td>${n > precio ? 'arriba' : n < precio ? 'abajo' : '—'}</td>`
-      + `<td>${pct}</td><td style="text-align:left"><span class="barra" style="width:${ancho}px"></span></td></tr>`;
+      + `<td>${pct}</td><td>${cuando}</td>`
+      + `<td style="text-align:left"><span class="barra" style="width:${ancho}px"></span></td></tr>`;
   }).join('');
 
   caja.innerHTML = `<table><caption style="text-align:left;color:var(--text-secondary);font-size:12.5px;padding:6px 0">`
-    + `Probabilidad de tocar cada nivel dentro de ${minutos} min</caption>`
-    + `<thead><tr><th>Nivel</th><th>Lado</th><th>Probabilidad</th><th style="text-align:left">&nbsp;</th></tr></thead>`
+    + `Probabilidad de tocar cada nivel dentro de ${minutos} min · el tiempo es la mediana de los caminos que SÍ llegan, con su rango intercuartil</caption>`
+    + `<thead><tr><th>Nivel</th><th>Lado</th><th>Probabilidad</th><th>Tarda</th><th style="text-align:left">&nbsp;</th></tr></thead>`
     + `<tbody>${filas}</tbody></table>`;
 }
 
