@@ -257,7 +257,7 @@ th { color: var(--text-faint); font-weight: 500; }
 
   <div class="tarjeta">
     <div class="controles">
-      <span class="rotulo-grupo">Probabilidad de que el precio TOQUE un nivel:</span>
+      <span class="rotulo-grupo">Probabilidad de que el precio TOQUE un nivel — haz clic en el gráfico:</span>
       <label class="campo">nivel <input id="nivelConsulta" type="number" step="any" placeholder="precio"></label>
       <label class="campo">dentro de <input id="minutosConsulta" type="number" value="15" min="1" max="45"> velas</label>
     </div>
@@ -519,6 +519,8 @@ const el = (n,a={}) => { const e = document.createElementNS(NS,n); for (const k 
 const svg = $('g');
 const W = 980, H = 430, M = { t:16, r:92, b:30, l:8 };
 let X, Y, nH;
+let escalaLo = 0, escalaHi = 1;   // rango vertical vigente, para invertir un clic
+let nivelSeleccionado = null;
 
 // Ventana visible en índices de vela. null = vista completa.
 let vista = null;
@@ -559,6 +561,7 @@ function dibujar() {
 
   let lo = Math.min(...vals), hi = Math.max(...vals);
   const pad = (hi-lo)*0.10 || 1; lo -= pad; hi += pad;
+  escalaLo = lo; escalaHi = hi;
 
   X = i => M.l + ((i - i0)/(i1 - i0))*(W-M.l-M.r);
   Y = v => M.t + (1-(v-lo)/(hi-lo))*(H-M.t-M.b);
@@ -630,6 +633,17 @@ function dibujar() {
   if (nP) { etq(Y(proyeccion.at(-1).p95),'95 %','var(--text-secondary)',-2);
             etq(Y(proyeccion.at(-1).p5),'95 %','var(--text-secondary)',8); }
   etq(Y(cierres.at(-1)), cierres.at(-1).toFixed(2), 'var(--precio)');
+
+  // Nivel elegido con un clic: línea a lo ancho y su probabilidad de ser tocado.
+  if (nivelSeleccionado !== null && nivelSeleccionado > lo && nivelSeleccionado < hi) {
+    const yN = Y(nivelSeleccionado);
+    svg.appendChild(el('line',{x1:M.l,y1:yN,x2:W-M.r,y2:yN,stroke:'var(--text-primary)','stroke-width':1.5,'stroke-dasharray':'7 4'}));
+    const paso = Math.min(Math.max(1, Number($('minutosConsulta').value) || 15), proyeccion.length) - 1;
+    const p = probabilidadDeTocar(nivelSeleccionado, paso);
+    const t1 = el('text',{x:M.l+8,y:yN-7,class:'etiqueta-directa',fill:'var(--text-primary)'});
+    t1.textContent = nivelSeleccionado.toFixed(2) + (p === null ? '' : '  ·  ' + (p*100).toFixed(1) + ' % de tocarlo');
+    svg.appendChild(t1);
+  }
 
   const cruz = el('line',{y1:M.t,y2:H-M.b,class:'eje',opacity:0,id:'cruz'});
   svg.appendChild(cruz);
@@ -787,16 +801,31 @@ let arrastre = null;
 svg.addEventListener('pointerdown', ev => {
   if (!totalActual) return;
   const [i0, i1] = limitesVista(totalActual);
-  arrastre = { x: ev.clientX, i0, i1 };
+  // Se guarda también el punto de partida para distinguir un clic de un
+  // arrastre: si el puntero apenas se movió, la intención era elegir un nivel.
+  arrastre = { x: ev.clientX, y: ev.clientY, i0, i1, movido: false };
   svg.classList.add('arrastrando');
   svg.setPointerCapture(ev.pointerId);
 });
 svg.addEventListener('pointerup', ev => {
+  const previo = arrastre;
   arrastre = null; svg.classList.remove('arrastrando');
   try { svg.releasePointerCapture(ev.pointerId); } catch {}
+
+  if (!previo || previo.movido) return;
+  // Clic limpio: se convierte la altura en precio invirtiendo la escala.
+  const caja = svg.getBoundingClientRect();
+  const yLienzo = (ev.clientY - caja.top) / caja.height * H;
+  if (yLienzo < M.t || yLienzo > H - M.b) return;
+  const precio = escalaLo + (1 - (yLienzo - M.t) / (H - M.t - M.b)) * (escalaHi - escalaLo);
+  nivelSeleccionado = precio;
+  $('nivelConsulta').value = precio.toFixed(2);
+  dibujar();
 });
 svg.addEventListener('pointermove', ev => {
   if (!arrastre) return;
+  if (Math.abs(ev.clientX - arrastre.x) > 4 || Math.abs(ev.clientY - arrastre.y) > 4) arrastre.movido = true;
+  if (!arrastre.movido) return;
   const caja = svg.getBoundingClientRect();
   const anchoIdx = arrastre.i1 - arrastre.i0;
   const desplazamiento = ((ev.clientX - arrastre.x)/caja.width*W) / (W-M.l-M.r) * anchoIdx;
@@ -815,7 +844,11 @@ $('verProyeccion').addEventListener('click', () => {
 $('reiniciarZoom').addEventListener('click', () => { vista = null; dibujar(); });
 
 
-for (const id of ['nivelConsulta','minutosConsulta']) $(id).addEventListener('input', pintarEscalera);
+for (const id of ['nivelConsulta','minutosConsulta']) $(id).addEventListener('input', () => {
+  const v = Number($('nivelConsulta').value);
+  nivelSeleccionado = Number.isFinite(v) && v > 0 ? v : null;
+  dibujar();
+});
 
 selSimbolo.addEventListener('change', () => { vista = null; conectar(); });
 selGran.addEventListener('change', () => { vista = null; conectar(); });
