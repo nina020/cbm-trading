@@ -97,6 +97,10 @@ select:hover, button:hover { border-color: var(--text-faint); }
 .campo { font-size: 12.5px; color: var(--text-secondary); display: inline-flex; align-items: center; gap: 6px; }
 .campo input { font: inherit; font-size: 12.5px; font-family: 'IBM Plex Mono', ui-monospace, monospace; width: 78px; padding: 7px 9px; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--bg-stat); color: var(--text-primary); }
 .resumen { font-size: 12.5px; color: var(--text-primary); font-family: 'IBM Plex Mono', ui-monospace, monospace; }
+.escalera { margin-top: 12px; }
+.escalera table { margin-top: 0; }
+.escalera .actual td { background: var(--bg-stat); font-weight: 600; }
+.escalera .barra { display: inline-block; height: 8px; border-radius: 4px; background: var(--blue); opacity: .55; vertical-align: middle; }
 .lienzo { position: relative; }
 svg.arrastrable { cursor: grab; }
 svg.arrastrando { cursor: grabbing; }
@@ -252,6 +256,15 @@ th { color: var(--text-faint); font-weight: 500; }
   </div>
 
   <div class="tarjeta">
+    <div class="controles">
+      <span class="rotulo-grupo">Probabilidad de que el precio TOQUE un nivel:</span>
+      <label class="campo">nivel <input id="nivelConsulta" type="number" step="any" placeholder="precio"></label>
+      <label class="campo">dentro de <input id="minutosConsulta" type="number" value="15" min="1" max="45"> velas</label>
+    </div>
+    <div id="escalera" class="escalera"></div>
+  </div>
+
+  <div class="tarjeta">
   <div class="aviso">
     <strong>El cono proyecta rango, no dirección.</strong> Se recalcula con los retornos reales que van llegando. <strong>No dice cuándo pasará nada.</strong>
     La banda rellena es dónde <em>estará</em> el precio en ese instante; la línea punteada es hasta dónde
@@ -293,6 +306,7 @@ for (const [cod, nom] of CATALOGO) selSimbolo.add(new Option(nom, cod));
 selSimbolo.value = 'BOOM1000';
 
 let ws = null, velas = [], ticks = [], proyeccion = [], spikes = new Set();
+let muestrasExtremos = null;
 let idSuscripciones = [], conteoTicks = 0, ultimoSpike = null, derivaTipica = 0;
 
 const meta = () => CATALOGO.find(c => c[0] === selSimbolo.value);
@@ -342,9 +356,16 @@ function proyectar(cierres) {
     }
   }
 
-  const cuantil = (m, f) => { m.sort((a,b)=>a-b); return m[Math.min(Math.floor(f*m.length), m.length-1)]; };
+  // Se guardan las muestras de máximos y mínimos por paso, ya ordenadas, para
+  // poder responder después "¿qué probabilidad hay de tocar el nivel X?" sobre
+  // cualquier precio, no solo sobre los percentiles que dibuja el cono.
+  maxPaso.forEach(m => m.sort((a,b)=>a-b));
+  minPaso.forEach(m => m.sort((a,b)=>a-b));
+  muestrasExtremos = { max: maxPaso, min: minPaso };
+
+  const cuantil = (m, f) => m[Math.min(Math.floor(f*m.length), m.length-1)];
   return porPaso.map((m, s) => ({
-    p5: cuantil(m,.05), p16: cuantil(m,.16), p50: cuantil(m,.5), p84: cuantil(m,.84), p95: cuantil(m,.95),
+    p5: (m.sort((a,b)=>a-b), cuantil(m,.05)), p16: cuantil(m,.16), p50: cuantil(m,.5), p84: cuantil(m,.84), p95: cuantil(m,.95),
     tocaSup: cuantil(maxPaso[s], .95),
     tocaInf: cuantil(minPaso[s], .05),
   }));
@@ -613,6 +634,7 @@ function dibujar() {
   const cruz = el('line',{y1:M.t,y2:H-M.b,class:'eje',opacity:0,id:'cruz'});
   svg.appendChild(cruz);
   pintarTabla();
+  pintarEscalera();
 }
 
 
@@ -678,6 +700,69 @@ $('alternar').addEventListener('click', () => {
   $('alternar').textContent = oculto ? 'Ocultar tabla' : 'Ver tabla';
 });
 
+
+/**
+ * Probabilidad de que el precio TOQUE un nivel dentro de un plazo.
+ *
+ * Se cuenta, sobre los caminos simulados, en cuántos el máximo (o el mínimo)
+ * acumulado alcanzó ese nivel. Es una pregunta con respuesta: describe hasta
+ * dónde suele llegar el precio.
+ *
+ * Lo que NO es: una señal de entrada. Que haya un 70 % de tocar un nivel no
+ * significa que operar hacia él gane dinero — el precio puede tocarlo después
+ * de haber pasado por tu stop. La probabilidad de alcanzar tu objetivo ANTES
+ * que tu stop sigue siendo la de siempre, cerca de un tercio con ratio 1:2.
+ */
+function probabilidadDeTocar(nivel, pasoIndice) {
+  if (!muestrasExtremos || !velas.length) return null;
+  const precio = velas.at(-1).c;
+  const arriba = nivel > precio;
+  const muestras = (arriba ? muestrasExtremos.max : muestrasExtremos.min)[pasoIndice];
+  if (!muestras || !muestras.length) return null;
+
+  // Las muestras están ordenadas: se cuenta por búsqueda binaria.
+  let lo = 0, hi = muestras.length;
+  while (lo < hi) { const m = (lo + hi) >> 1; if (muestras[m] < nivel) lo = m + 1; else hi = m; }
+  const alcanzan = arriba ? muestras.length - lo : lo;
+  return alcanzan / muestras.length;
+}
+
+function pintarEscalera() {
+  const caja = $('escalera');
+  if (!proyeccion.length || !velas.length || !muestrasExtremos) { caja.innerHTML = ''; return; }
+
+  const paso = Math.min(Math.max(1, Number($('minutosConsulta').value) || 15), proyeccion.length) - 1;
+  const minutos = ((paso + 1) * Number(selGran.value) / 60).toFixed(0);
+  const precio = velas.at(-1).c;
+  const p = proyeccion[paso];
+
+  // Escalera automática entre los bordes de toque, más el nivel consultado.
+  const niveles = [];
+  for (let i = 3; i >= 1; i--) niveles.push(precio + (p.tocaSup - precio) * (i / 3));
+  niveles.push(precio);
+  for (let i = 1; i <= 3; i++) niveles.push(precio - (precio - p.tocaInf) * (i / 3));
+
+  const consulta = Number($('nivelConsulta').value);
+  if (Number.isFinite(consulta) && consulta > 0) niveles.push(consulta);
+  niveles.sort((a, b) => b - a);
+
+  const filas = niveles.map((n) => {
+    const esActual = Math.abs(n - precio) < 1e-9;
+    const prob = esActual ? null : probabilidadDeTocar(n, paso);
+    const pct = prob === null ? '—' : (prob * 100).toFixed(1) + ' %';
+    const ancho = prob === null ? 0 : Math.round(prob * 90);
+    const marca = Number.isFinite(consulta) && Math.abs(n - consulta) < 1e-9 ? ' ←' : '';
+    return `<tr class="${esActual ? 'actual' : ''}"><td>${n.toFixed(2)}${esActual ? ' (ahora)' : marca}</td>`
+      + `<td>${n > precio ? 'arriba' : n < precio ? 'abajo' : '—'}</td>`
+      + `<td>${pct}</td><td style="text-align:left"><span class="barra" style="width:${ancho}px"></span></td></tr>`;
+  }).join('');
+
+  caja.innerHTML = `<table><caption style="text-align:left;color:var(--text-secondary);font-size:12.5px;padding:6px 0">`
+    + `Probabilidad de tocar cada nivel dentro de ${minutos} min</caption>`
+    + `<thead><tr><th>Nivel</th><th>Lado</th><th>Probabilidad</th><th style="text-align:left">&nbsp;</th></tr></thead>`
+    + `<tbody>${filas}</tbody></table>`;
+}
+
 // ── zoom y desplazamiento ────────────────────────────────────────────────
 // Rueda para acercar alrededor del cursor, arrastrar para desplazar, doble
 // clic para volver a la vista completa.
@@ -729,6 +814,8 @@ $('verProyeccion').addEventListener('click', () => {
 });
 $('reiniciarZoom').addEventListener('click', () => { vista = null; dibujar(); });
 
+
+for (const id of ['nivelConsulta','minutosConsulta']) $(id).addEventListener('input', pintarEscalera);
 
 selSimbolo.addEventListener('change', () => { vista = null; conectar(); });
 selGran.addEventListener('change', () => { vista = null; conectar(); });
